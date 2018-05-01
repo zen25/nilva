@@ -50,7 +50,12 @@ waitForMsgsFromLeaderOrCandidate(Term) ->
 waitForVotesFromPeers(Term) ->
     {candidate, Term}.
 
-% Send heartbeats to all the followers. When not enouch followers respond with ACKs,
+% Send heartbeats to all the followers. When not enough followers respond with ACKs,
 % step down as the leader
+%
+% Child Processes:
+%     - 1 to handle election timeouts
+%     - 1 to handle incoming messages
+%     - 1 to handle outgoing messages
 waitForClientRequests(Term) ->
     {leader, Term}.
