@@ -18,19 +18,20 @@ init(Args) ->
     _ = Args,
     ElectionTimeOut = get_election_timeout(),
     CurrentServerState = follower,
-    loop(CurrentServerState, ElectionTimeOut, ?HEART_BEAT_INTERVAL_IN_MS).
+    Term = 1,
+    loop(CurrentServerState, Term, ElectionTimeOut, ?HEART_BEAT_INTERVAL_IN_MS).
 
 % TODO: How should I handle election timeout, hearbeats?
 %       I think I need to spawn child processes to handle these concurrently
-loop(follower, ElectionTimeOut, HeartBeat) ->
-    NewState = waitForMsgsFromLeaderOrCandidate(),
-    loop(NewState, ElectionTimeOut, HeartBeat);
-loop(candidate, ElectionTimeOut, HeartBeat) ->
-    NewState = waitForVotesFromPeers(),
-    loop(NewState, ElectionTimeOut, HeartBeat);
-loop(leader, ElectionTimeOut, HeartBeat) ->
-    NewState = waitForClientRequests(),
-    loop(NewState, ElectionTimeOut, HeartBeat).
+loop(follower, Term, ElectionTimeOut, HeartBeat) ->
+    {NewState, NewTerm} = waitForMsgsFromLeaderOrCandidate(Term),
+    loop(NewState, NewTerm, ElectionTimeOut, HeartBeat);
+loop(candidate, Term, ElectionTimeOut, HeartBeat) ->
+    {NewState, NewTerm} = waitForVotesFromPeers(Term),
+    loop(NewState, NewTerm, ElectionTimeOut, HeartBeat);
+loop(leader, Term, ElectionTimeOut, HeartBeat) ->
+    {NewState, NewTerm} = waitForClientRequests(Term),
+    loop(NewState, NewTerm, ElectionTimeOut, HeartBeat).
 
 
 % Return an election timeout based on heartbeat interval
@@ -40,15 +41,15 @@ get_election_timeout() ->
 
 
 % If a leader sends a heartbeat before election timeout timer, reset the timer
-waitForMsgsFromLeaderOrCandidate() ->
-    follower.
+waitForMsgsFromLeaderOrCandidate(Term) ->
+    {follower, Term}.
 
 % If majority quorum is reached, become the leader
 % Otherwise, begin the next term
-waitForVotesFromPeers() ->
-    candidate.
+waitForVotesFromPeers(Term) ->
+    {candidate, Term}.
 
 % Send heartbeats to all the followers. When not enouch followers respond with ACKs,
 % step down as the leader
-waitForClientRequests() ->
-    leader.
+waitForClientRequests(Term) ->
+    {leader, Term}.
