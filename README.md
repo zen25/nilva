@@ -17,7 +17,11 @@ TODO:
  - [ ] Optimizations
     - [ ] Log Compaction
     - [ ] Pipelining
-    - [ ]
+
+
+See implementation_notes.md for comments on the implementation choices.
+
+
 Build
 -----
 
