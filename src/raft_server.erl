@@ -4,6 +4,7 @@
 -import(rand, []).
 
 -type server_state() :: leader | candidate | follower.
+-type msg_types() :: append_entry | request_vote.
 
 % TODO: Make this part of config file
 -define(HEART_BEAT_INTERVAL_IN_MS, 20).  % 20 ms
