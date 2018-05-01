@@ -23,7 +23,7 @@ init(Args) ->
 % TODO: How should I handle election timeout, hearbeats?
 %       I think I need to spawn child processes to handle these concurrently
 loop(follower, ElectionTimeOut, HeartBeat) ->
-    NewState = waitForMsgsFromLeader(),
+    NewState = waitForMsgsFromLeaderOrCandidate(),
     loop(NewState, ElectionTimeOut, HeartBeat);
 loop(candidate, ElectionTimeOut, HeartBeat) ->
     NewState = waitForVotesFromPeers(),
@@ -40,7 +40,7 @@ get_election_timeout() ->
 
 
 % If a leader sends a heartbeat before election timeout timer, reset the timer
-waitForMsgsFromLeader() ->
+waitForMsgsFromLeaderOrCandidate() ->
     follower.
 
 % If majority quorum is reached, become the leader
