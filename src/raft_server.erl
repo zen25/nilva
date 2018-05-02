@@ -4,7 +4,13 @@
 -import(rand, []).
 
 -type server_state() :: leader | candidate | follower.
--type msg_types() :: append_entry | request_vote.
+-type raft_msg() :: append_entry | request_vote.
+
+% NOTE: `Term` must be included along with response when responding to both
+%        `append_entry` and `request_vote` msgs. This is needed as we have no way of
+%        knowing which msg the peer responded to if there are more than one input
+%        messages. Erlang does guarantee in order delivery in case of a single process.
+-type response_to_raft_msg() :: ack | nack.
 
 % TODO: Make this part of config file
 -define(HEART_BEAT_INTERVAL_IN_MS, 20).  % 20 ms
