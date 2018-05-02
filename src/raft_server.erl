@@ -21,6 +21,7 @@ start(Args) ->
     spawn(server, init, [Args]).
 
 
+% TODO: We need to keep track of peers, current term, last known leaders term etc.
 init(Args) ->
     _ = Args,
     ElectionTimeOut = get_election_timeout(),
@@ -31,7 +32,7 @@ init(Args) ->
 % TODO: How should I handle election timeout, hearbeats?
 %       I think I need to spawn child processes to handle these concurrently
 loop(follower, Term, ElectionTimeOut, HeartBeat) ->
-    {NewState, NewTerm} = waitForMsgsFromLeaderOrCandidate(Term),
+    {NewState, NewTerm} = waitForMsgsFromLeaderOrCandidate(Term, ElectionTimeOut),
     loop(NewState, NewTerm, ElectionTimeOut, HeartBeat);
 loop(candidate, Term, ElectionTimeOut, HeartBeat) ->
     {NewState, NewTerm} = waitForVotesFromPeers(Term),
@@ -48,8 +49,22 @@ get_election_timeout() ->
 
 
 % If a leader sends a heartbeat before election timeout timer, reset the timer
-waitForMsgsFromLeaderOrCandidate(Term) ->
-    {follower, Term}.
+waitForMsgsFromLeaderOrCandidate(Term, ElectionTimeOut) ->
+    receive
+        % Hmm, this is wrong. ElectionTimeout is independent of wheather you are a
+        % candidate/follower. When a heartbeat is acknowledged, the timeout should reset
+        {From, request_vote, CandidateTerm} when CandidateTerm > Term ->
+            % vote for the first candidate who requested to be the leader,
+            % reject others
+            From ! {self(), ack, Term};
+        {From, append_entry, LeaderTerm} when LeaderTerm >= Term ->
+            % If the leader sends a heartbeat, acknowledge it
+            From ! {self(), ack, Term};
+        {From, _, _} ->
+            From ! {self(), nack, Term}
+    after ElectionTimeOut ->
+        {candidate, Term + 1}
+    end.
 
 % If majority quorum is reached, become the leader
 % Otherwise, begin the next term
