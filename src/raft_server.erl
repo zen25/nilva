@@ -29,6 +29,19 @@ init(Args) ->
     Term = 1,
     loop(CurrentServerState, Term, ElectionTimeOut, ?HEART_BEAT_INTERVAL_IN_MS).
 
+% Process Skeleton
+%
+% All of the child processes need to be under supervision tree
+%
+% ^
+% + Main Raft Server
+%       |
+%       +- ElectionTimeout Timer (start, reset, alert) x 1
+%       |
+%       +- HandleIncomingMessages x #Peers
+%       |
+%       +- SendOutgoingMessages x #Peers
+
 % TODO: How should I handle election timeout, hearbeats?
 %       I think I need to spawn child processes to handle these concurrently
 loop(follower, Term, ElectionTimeOut, HeartBeat) ->
