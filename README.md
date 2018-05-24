@@ -17,6 +17,7 @@ TODO:
  - [ ] Optimizations
     - [ ] Log Compaction
     - [ ] Pipelining
+    - [ ] Serving Reads from Followers
 
 
 See implementation_notes.md for comments on the implementation choices.

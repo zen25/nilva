@@ -6,7 +6,8 @@ work may be needed to enable serving reads by the follower.
 
 ---
 
-#References:
+References:
+----------
 1. Designing for Scalability with Erlang/OTP by Francesco Cesarini & Steve Vinoski
 2. Learn You Some Erlang for Great Good! A Beginner's Guide by Fred Hébert
 3. [A Concise Guide to Erlang by David Matuszek](http://www.cis.upenn.edu/~matuszek/General/ConciseGuides/concise-erlang.html)
