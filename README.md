@@ -21,8 +21,3 @@ TODO:
 
 See implementation_notes.md for comments on the implementation choices.
 
-
-Build
------
-
-    $ rebar3 compile
