@@ -1,16 +1,17 @@
-{application, .,
- [{description, "An OTP application"},
+{application, nilva,
+ [{description, "A Key-Value Store based on Raft"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, { ._app, []}},
+  {mod, { nilva_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    lager
    ]},
   {env,[]},
   {modules, []},
 
-  {maintainers, []},
+  {maintainers, ["Eswar Paladugu"]},
   {licenses, ["Apache 2.0"]},
   {links, []}
  ]}.
