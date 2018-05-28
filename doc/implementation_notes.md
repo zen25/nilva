@@ -10,7 +10,7 @@ that log entry.
 ---
 
 Annoying Errors and Their Fixes:
---------------------------------------
+================================
 
 **Error**:
 
