@@ -1,4 +1,4 @@
--module(raft_fsm).
+-module(nilva_raft_fsm).
 -behaviour(gen_fsm).
 
 %% Cluster & Peer management
