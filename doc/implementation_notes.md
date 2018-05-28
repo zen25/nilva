@@ -12,10 +12,12 @@ that log entry.
 Annoying Errors and Their Fixes:
 --------------------------------------
 
-Error:
+**Error**:
+
 ===> Invalid /Users/eswarpaladugu/code/nilva/_build/default/lib/nilva/ebin/..app: name of application (nilva) must match filename.
 
-Fix:
+**Fix**:
+
 You most likely have "..app.src" instead of "<appname>.app.src"
 
 
