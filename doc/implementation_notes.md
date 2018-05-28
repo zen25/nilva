@@ -17,7 +17,7 @@ that log entry.
 
 **Fix**:
 
-You most likely have "..app.src" instead of "<appname>.app.src"
+You most likely have "..app.src" instead of "appname.app.src"
 
 
 ---
