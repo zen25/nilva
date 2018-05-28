@@ -9,6 +9,18 @@ that log entry.
 
 ---
 
+Annoying Errors and Their Fixes:
+--------------------------------------
+
+Error:
+===> Invalid /Users/eswarpaladugu/code/nilva/_build/default/lib/nilva/ebin/..app: name of application (nilva) must match filename.
+
+Fix:
+You most likely have "..app.src" instead of "<appname>.app.src"
+
+
+---
+
 References:
 ----------
 1. Designing for Scalability with Erlang/OTP by Francesco Cesarini & Steve Vinoski

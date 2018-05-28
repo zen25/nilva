@@ -1,5 +1,7 @@
 -module(nilva_raft_fsm).
+
 -behaviour(gen_fsm).
+% -include("nilva_types.hrl").
 
 %% Cluster & Peer management
 -export([start/2, stop/1, join/1]).
