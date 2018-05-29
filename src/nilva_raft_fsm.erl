@@ -1,6 +1,6 @@
 -module(nilva_raft_fsm).
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 % -include("nilva_types.hrl").
 
 %% Cluster & Peer management
@@ -23,15 +23,15 @@
 %% =========================================================================
 %% Public API for CLient to interact with RSM
 %% =========================================================================
-get(K) ->
+get(K, _ClientSeqNum) ->
     % TODO
     K.
 
-put(_K, _V) ->
+put(_K, _V, _ClientSeqNum) ->
     % TODO
     ok.
 
-delete(_K) ->
+delete(_K, _ClientSeqNum) ->
     % TODO
     ok.
 
@@ -85,18 +85,53 @@ terminate(_Reason, _StateName, _LoopData) ->
 %       AppendEntries rpcs from the Peers.
 %       They should also handle the requests from the various clients
 
-follower(boot, State) ->
+
+%% Events
+%%
+%% 1. Replies from AppendEntries (Ack/Nack)
+%% 2. Replies from RequestVotes (Ack/Nack)
+%% 3. TimeOuts (HeartBeats when leader, Election Timeouts when candidate/follower)
+%% 3. Client Requests
+%% 4. Config Management Commands
+%% 5. Stop commands
+%% 6. Test commands (like drop next N messages, drop 5% of messages etc.)
+%%
+%% Each of the above must be handled in every state
+%%
+
+
+% TODO: Too Many terms. Use a record to make the code concise
+follower({append_entries, LTerm, LId, PrevLogIdx, PrevLogTerm, Entries, LCommitIdx},
+         State) ->
+    if
+        LTerm < FTerm ->
+            LId ! {reply_append_entries, FTerm, false};
+        true ->
+            Reply = nilva_raft_helper:handle_append_entries()
+    end,
     {next_state, follower, State};
 follower(election_timeout, State) ->
     % Start an election and switch to candidate
-    {next_state, candidate, State}.
+    NewState = startElection(State),
+    {next_state, candidate, NewState}.
 
 
-candidate(waitForQuorum, State) ->
-    {next_state, candidate, State};
 candidate(quorumAchieved, State) ->
-    % Send out an empty append entries to solidify the position
-    {next_state, leader, State};
+    IgnoreStaleMsg = nilva_raft_helper:CheckForStaleMessages(quorumAchieved),
+    if
+        IgnoreStaleMsg ->
+            {next_state, leader, State};
+        true ->
+            QuorumReached, NewState = nilva_raft_helper:waitForQuorum(State),
+            if
+                QuorumReached ->
+                    % Establish your authority as leader and switch to leader state
+                    sendHeartBeatNoOp(NewState),
+                    {next_state, leader, NewState};
+                true ->
+                    {next_state, candidate, NewState}
+            end
+    end;
 candidate(discoveredNewLeader, State) ->
     {next_state, follower, State};
 candidate(discoveredHigherTerm, State) ->
