@@ -88,13 +88,15 @@ terminate(_Reason, _StateName, _LoopData) ->
 
 %% Events
 %%
-%% 1. Replies from AppendEntries (Ack/Nack)
-%% 2. Replies from RequestVotes (Ack/Nack)
-%% 3. TimeOuts (HeartBeats when leader, Election Timeouts when candidate/follower)
-%% 3. Client Requests
-%% 4. Config Management Commands
-%% 5. Stop commands
-%% 6. Test commands (like drop next N messages, drop 5% of messages etc.)
+%% 1. AppendEntries
+%% 2. RequestVotes
+%% 3. Replies for AppendEntries (Ack/Nack)
+%% 4. Replies for RequestVotes (Ack/Nack)
+%% 5. TimeOuts (HeartBeats when leader, Election Timeouts when candidate/follower)
+%% 6. Client Requests to RSM
+%% 7. Config Management Commands
+%% 8. Stop commands
+%% 9. Test commands (like drop next N messages, drop 5% of messages etc.)
 %%
 %% Each of the above must be handled in every state
 %%

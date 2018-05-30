@@ -9,6 +9,39 @@ that log entry.
 
 ---
 
+## Raft Logs:
+
+Raft logs act as WAL for the RSM. Logs are used to store multiple types of entries:
+    - durable raft server state
+    - client RSM commands
+    - snapshot information
+    - response to client RSM commands
+
+Each of these are stored as a json entry in the log file.
+
+Snapshotting is not needed if the RSM is itself durable. For example, if the RSM is sqlite,
+once the SQL command is applied, it is durable. We may need to keep the responses still in
+the log though to properly handle client requests in case of idempotent client requests.
+
+
+## Test Infrastructure:
+
+A process that is dropping messages is indistinguishable from a failed process in a distributed
+system. Use this to your advantage.
+
+To simulate a peer failure, we can:
+    - drop next N messages
+    - drop x% of arriving messages randomly based on uniform distribution
+    - drop all messages until we decide not to anymore
+
+Dropping messages comes with a caveat though. How should we handle messages from the log
+server and self()? We know that log server and raft fsm are under a supervisor with one for
+all strategy. Need to figure out what to do in this case.
+
+In addition to that, we can have a peer forcefully start a new election.
+
+---
+
 ### Annoying Errors and Their Fixes:
 
 **Error**:
