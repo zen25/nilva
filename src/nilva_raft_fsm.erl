@@ -4,7 +4,7 @@
 -include("nilva_types.hrl").
 
 %% Cluster & Peer management
--export([start/2, stop/1, join/1]).
+-export([start/2, start_link/0, stop/1, join/1]).
 
 %% Replicated State Machine (RSM) commands
 %% TODO: Separate the RSM from Raft consensus modules
@@ -45,6 +45,9 @@ start(PeerName, {Peers, ElectionTimeOut, CheckSuccessfulStartup}) ->
     % Assuming that Peer names are unique in the global erlang cluster
     gen_statem:start_link({global, PeerName}, ?MODULE,
                        [PeerName, Peers, ElectionTimeOut, CheckSuccessfulStartup], []).
+
+start_link() ->
+    gen_statem:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 stop(PeerName) ->
     gen_statem:stop(PeerName).
