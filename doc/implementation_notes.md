@@ -42,6 +42,21 @@ In addition to that, we can have a peer forcefully start a new election.
 
 ---
 
+### Dev Environment
+
+**Q**: What is the erlang's equivalent of `dir()` in Python?
+
+##### Rebar3
+
+Rebar3 comes with lots of features. Some things I was not aware of:
+    - "rebar3 shell" launches an interactice shell from which you can compile, run tests & run dialyzer
+    - running dialyzer compiles the code. No need to do the compile step as a separate step
+    - you can launch an app by " > rebar3 shell --apps nilva"
+
+See: (https://ferd.ca/rebar3-shell.html)
+
+---
+
 ### Annoying Errors and Their Fixes:
 
 **Error**:
