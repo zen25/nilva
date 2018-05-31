@@ -1,14 +1,14 @@
 -module(nilva_raft_fsm).
 
 -behaviour(gen_statem).
-% -include("nilva_types.hrl").
+-include("nilva_types.hrl").
 
 %% Cluster & Peer management
 -export([start/2, stop/1, join/1]).
 
 %% Replicated State Machine (RSM) commands
 %% TODO: Separate the RSM from Raft consensus modules
--export([get/2, put/3, delete/2, add/2]).
+-export([get/1, put/1, delete/1]).
 
 % gen_fsm callbacks & state
 -export([init/4, terminate/3, handle_sync_event/4]).
@@ -17,17 +17,23 @@
 %% =========================================================================
 %% Public API for CLient to interact with RSM
 %% =========================================================================
-get(K, _ClientSeqNum) ->
-    % TODO
-    K.
 
-put(_K, _V, _ClientSeqNum) ->
-    % TODO
-    ok.
+% TODO: Is this a good idea, we can still get the errors if we call using put
+-spec get(client_request()) -> response_to_client().
+get({CSN, get, {key, K}}) ->
+    % TODO:
+    %       Convert to and fro from (CSN, string()) to internal types
+    {CSN, {value, K}}.
 
-delete(_K, _ClientSeqNum) ->
+-spec put(client_request()) -> response_to_client().
+put({CSN, put, {key, K}, {value, V}}) ->
     % TODO
-    ok.
+    {CSN, ok}.
+
+-spec delete(client_request()) -> response_to_client().
+delete({CSN, delete, {key, K}}) ->
+    % TODO
+    {CSN, ok}.
 
 %% =========================================================================
 %% Raft Peer/Cluster API
@@ -150,6 +156,3 @@ waitTillAllPeersHaveStarted(_Me, _Peers, _NumberOfHeartBeats) ->
     % Send pings to all the peers and see if you get pong with given number of heartbeats
     false.
 
--spec add(number(), number()) -> number().
-add(X, Y) ->
-    X + Y.
