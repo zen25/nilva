@@ -16,9 +16,6 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-echo(Msg) ->
-    gen_server:call(?MODULE, {echo, Msg}).
-
 
 %% =========================================================================
 %% Callbacks (gen_server)
@@ -34,3 +31,8 @@ handle_cast({echo, Msg}, LoopData) ->
     {noreply, LoopData, LoopData}.
 
 
+%% =========================================================================
+%% For testing & debugging
+%% =========================================================================
+echo(Msg) ->
+    gen_server:call(?MODULE, {echo, Msg}).

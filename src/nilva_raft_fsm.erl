@@ -15,7 +15,10 @@
         callback_mode/0,
         terminate/3,
         handle_sync_event/4]).
--export([leader/2, follower/2, candidate/2]).
+-export([leader/3, follower/3, candidate/3]).
+
+% For testing & debugging
+-export([echo/1]).
 
 %% =========================================================================
 %% Public API for CLient to interact with RSM
@@ -121,11 +124,14 @@ terminate(_Reason, _StateName, _LoopData) ->
 %     %         Reply = nilva_raft_helper:handle_append_entries()
 %     % end,
 %     {next_state, follower, State};
-follower(election_timeout, State) ->
+follower({cast, From}, election_timeout, State) ->
     % Start an election and switch to candidate
     % NewState = startElection(State),
     % {next_state, candidate, NewState}.
-    {next_state, candidate, State}.
+    {next_state, candidate, State};
+follower(EventType, EventContent, State) ->
+    % Handle the rest
+    handle_event(EventType, EventContent, State).
 
 
 % candidate(quorumAchieved, State) ->
@@ -144,19 +150,25 @@ follower(election_timeout, State) ->
 %                     {next_state, candidate, NewState}
 %             end
 %     end;
-candidate(discoveredNewLeader, State) ->
-    {next_state, follower, State};
-candidate(discoveredHigherTerm, State) ->
-    {next_state, follower, State};
-candidate(election_timeout, State) ->
+% candidate({cast, From}, discoveredNewLeader, State) ->
+%     {next_state, follower, State};
+% candidate(discoveredHigherTerm, State) ->
+%     {next_state, follower, State};
+candidate({cast, From}, election_timeout, State) ->
     % Start a new election
-    {next_state, candidate, State}.
+    {next_state, candidate, State};
+candidate(EventType, EventContent, State) ->
+    % Handle the rest
+    handle_event(EventType, EventContent, State).
 
 
-leader(handleClientRequest, State) ->
-    {next_state, leader, State};
-leader(discoveredHigherTerm, State) ->
-    {next_state, follower, State}.
+% leader(handleClientRequest, State) ->
+%     {next_state, leader, State};
+leader({cast, From}, discoveredHigherTerm, State) ->
+    {next_state, follower, State};
+leader(EventType, EventContent, State) ->
+    % Handle the rest
+    handle_event(EventType, EventContent, State).
 
 %% =========================================================================
 %% Helpers (Private)
@@ -164,4 +176,16 @@ leader(discoveredHigherTerm, State) ->
 % waitTillAllPeersHaveStarted(_Me, _Peers, _NumberOfHeartBeats) ->
 %     % Send pings to all the peers and see if you get pong with given number of heartbeats
 %     false.
+
+handle_event({call, From}, Msg, State) ->
+    {keep_state_and_data, {reply, From, Msg}};
+handle_event(_, _, State) ->
+    % Unknown event
+    {keep_state_and_data, []}.
+
+%% =========================================================================
+%% Callbacks (gen_server)
+%% =========================================================================
+echo(Msg) ->
+    gen_statem:call(?MODULE, {echo, Msg}).
 
