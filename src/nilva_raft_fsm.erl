@@ -8,17 +8,11 @@
 
 %% Replicated State Machine (RSM) commands
 %% TODO: Separate the RSM from Raft consensus modules
--export([get/1, put/2, delete/1]).
+-export([get/2, put/3, delete/2, add/2]).
 
 % gen_fsm callbacks & state
 -export([init/4, terminate/3, handle_sync_event/4]).
 -export([leader/2, follower/2, candidate/2]).
-
-
-%% TODO: Extract these into a config file at a later point
--define(HEART_BEAT_TIMEOUT, 25).
--define(CLIENT_RESPONSE_TIMEOUT, 5000).     % Default
--define(MAXIMUM_TIME_FOR_BOOTSTRAPPING, 60000).     % Wait for a minute for bootstrapping
 
 %% =========================================================================
 %% Public API for CLient to interact with RSM
@@ -105,35 +99,36 @@ terminate(_Reason, _StateName, _LoopData) ->
 % TODO: Too Many terms. Use a record to make the code concise
 follower({append_entries, LTerm, LId, PrevLogIdx, PrevLogTerm, Entries, LCommitIdx},
          State) ->
-    if
-        LTerm < FTerm ->
-            LId ! {reply_append_entries, FTerm, false};
-        true ->
-            Reply = nilva_raft_helper:handle_append_entries()
-    end,
+    % if
+    %     LTerm < FTerm ->
+    %         LId ! {reply_append_entries, FTerm, false};
+    %     true ->
+    %         Reply = nilva_raft_helper:handle_append_entries()
+    % end,
     {next_state, follower, State};
 follower(election_timeout, State) ->
     % Start an election and switch to candidate
-    NewState = startElection(State),
-    {next_state, candidate, NewState}.
+    % NewState = startElection(State),
+    % {next_state, candidate, NewState}.
+    {next_state, candidate, State}.
 
 
-candidate(quorumAchieved, State) ->
-    IgnoreStaleMsg = nilva_raft_helper:CheckForStaleMessages(quorumAchieved),
-    if
-        IgnoreStaleMsg ->
-            {next_state, leader, State};
-        true ->
-            QuorumReached, NewState = nilva_raft_helper:waitForQuorum(State),
-            if
-                QuorumReached ->
-                    % Establish your authority as leader and switch to leader state
-                    sendHeartBeatNoOp(NewState),
-                    {next_state, leader, NewState};
-                true ->
-                    {next_state, candidate, NewState}
-            end
-    end;
+% candidate(quorumAchieved, State) ->
+%     IgnoreStaleMsg = nilva_raft_helper:CheckForStaleMessages(quorumAchieved),
+%     if
+%         IgnoreStaleMsg ->
+%             {next_state, leader, State};
+%         true ->
+%             QuorumReached, NewState = nilva_raft_helper:waitForQuorum(State),
+%             if
+%                 QuorumReached ->
+%                     % Establish your authority as leader and switch to leader state
+%                     sendHeartBeatNoOp(NewState),
+%                     {next_state, leader, NewState};
+%                 true ->
+%                     {next_state, candidate, NewState}
+%             end
+%     end;
 candidate(discoveredNewLeader, State) ->
     {next_state, follower, State};
 candidate(discoveredHigherTerm, State) ->
@@ -154,3 +149,7 @@ leader(discoveredHigherTerm, State) ->
 waitTillAllPeersHaveStarted(_Me, _Peers, _NumberOfHeartBeats) ->
     % Send pings to all the peers and see if you get pong with given number of heartbeats
     false.
+
+-spec add(number(), number()) -> number().
+add(X, Y) ->
+    X + Y.
