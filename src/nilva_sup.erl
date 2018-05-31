@@ -9,8 +9,9 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init(_Args) ->
-    ChildSpecList = [child(nilva_raft_fsm), child(nilva_log_server)],
-    {ok, {one_for_all, 2, 3600}, ChildSpecList}.
+    SupFlags = {one_for_all, 5, 10},
+    Children = [child(nilva_raft_fsm), child(nilva_log_server)],
+    {ok, {SupFlags, Children}}.
 
 child(Module) ->
-    {Module, {Module, start_link, []}, permanent, 2000, worker, [Module]}.
+    {Module, {Module, start_link, []}, permanent, 10000, worker, [Module]}.
