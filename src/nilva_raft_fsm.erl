@@ -10,8 +10,11 @@
 %% TODO: Separate the RSM from Raft consensus modules
 -export([get/1, put/1, delete/1]).
 
-% gen_fsm callbacks & state
--export([init/4, terminate/3, handle_sync_event/4]).
+% gen_statem callbacks & state
+-export([init/1,
+        callback_mode/0,
+        terminate/3,
+        handle_sync_event/4]).
 -export([leader/2, follower/2, candidate/2]).
 
 %% =========================================================================
@@ -26,12 +29,12 @@ get({CSN, get, {key, K}}) ->
     {CSN, {value, K}}.
 
 -spec put(client_request()) -> response_to_client().
-put({CSN, put, {key, K}, {value, V}}) ->
+put({CSN, put, {key, _K}, {value, _V}}) ->
     % TODO
     {CSN, ok}.
 
 -spec delete(client_request()) -> response_to_client().
-delete({CSN, delete, {key, K}}) ->
+delete({CSN, delete, {key, _K}}) ->
     % TODO
     {CSN, ok}.
 
@@ -40,11 +43,11 @@ delete({CSN, delete, {key, K}}) ->
 %% =========================================================================
 start(PeerName, {Peers, ElectionTimeOut, CheckSuccessfulStartup}) ->
     % Assuming that Peer names are unique in the global erlang cluster
-    gen_fsm:start_link({global, PeerName}, ?MODULE,
+    gen_statem:start_link({global, PeerName}, ?MODULE,
                        [PeerName, Peers, ElectionTimeOut, CheckSuccessfulStartup], []).
 
 stop(PeerName) ->
-    gen_fsm:sync_send_all_state_event(PeerName, stop).
+    gen_statem:stop(PeerName).
 
 join(_Peer) ->
     % Send a ping request to join the cluster
@@ -55,10 +58,13 @@ join(_Peer) ->
 
 
 %% =========================================================================
-%% CALLBACKS (gen_fsm)
+%% CALLBACKS (gen_statem)
 %% =========================================================================
-init(_Me, _Peers, _ElectionTimeOut, _CheckSuccessfulStartup) ->
+init(_Args) ->
     {ok, follower, []}.
+
+callback_mode() ->
+    state_functions.
 
 handle_sync_event(stop, _From, _State, LoopData) ->
     {stop, normal, LoopData}.
@@ -103,15 +109,15 @@ terminate(_Reason, _StateName, _LoopData) ->
 
 
 % TODO: Too Many terms. Use a record to make the code concise
-follower({append_entries, LTerm, LId, PrevLogIdx, PrevLogTerm, Entries, LCommitIdx},
-         State) ->
-    % if
-    %     LTerm < FTerm ->
-    %         LId ! {reply_append_entries, FTerm, false};
-    %     true ->
-    %         Reply = nilva_raft_helper:handle_append_entries()
-    % end,
-    {next_state, follower, State};
+% follower({append_entries, LTerm, LId, PrevLogIdx, PrevLogTerm, Entries, LCommitIdx},
+%          State) ->
+%     % if
+%     %     LTerm < FTerm ->
+%     %         LId ! {reply_append_entries, FTerm, false};
+%     %     true ->
+%     %         Reply = nilva_raft_helper:handle_append_entries()
+%     % end,
+%     {next_state, follower, State};
 follower(election_timeout, State) ->
     % Start an election and switch to candidate
     % NewState = startElection(State),
@@ -152,7 +158,7 @@ leader(discoveredHigherTerm, State) ->
 %% =========================================================================
 %% Helpers (Private)
 %% =========================================================================
-waitTillAllPeersHaveStarted(_Me, _Peers, _NumberOfHeartBeats) ->
-    % Send pings to all the peers and see if you get pong with given number of heartbeats
-    false.
+% waitTillAllPeersHaveStarted(_Me, _Peers, _NumberOfHeartBeats) ->
+%     % Send pings to all the peers and see if you get pong with given number of heartbeats
+%     false.
 

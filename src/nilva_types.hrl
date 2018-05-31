@@ -38,10 +38,34 @@
 -type log_sequence_number() :: non_neg_integer().
 -type entry() :: any().
 -type status() :: volatile | durable | committed | applied.
--type response() :: 'undefined' | string().
+-type rsm_response() :: 'undefined' | string().
 
 % Others
 %
+
+
+%% ========================================================================
+%% Log related records
+%% ========================================================================
+-record(log_entry, {
+        lsn             :: log_sequence_number(),
+        status          :: status(),
+        entry           :: entry(),
+        response        :: rsm_response()
+        }).
+-type log_entry() :: #log_entry{}.
+
+-type file_name() :: string().
+-type storage() :: file_name().
+
+-record(raft_log, {
+        log_entries     :: list(log_entry),
+        storage         :: storage(),
+        last_applied    :: log_sequence_number(),
+        last_committed  :: log_sequence_number(),
+        last_written    :: log_sequence_number()
+        }).
+-type raft_log() :: #raft_log{}.
 
 %% ========================================================================
 %% Raft State
@@ -59,7 +83,7 @@
         % Persistent state on all servers
         current_term = 0    :: raft_term(),
         voted_for           :: 'undefined' | raft_peer_id(),
-        log,
+        log                 :: raft_log(),
         config              :: raft_config(),
 
         % Volatile state on all server
@@ -67,8 +91,9 @@
         last_applied = 0    :: raft_log_idx(),      % Must be <= commit_idx
 
         % Volatile state on leaders
-        next_idx,
-        match_idx
+        % TODO: How do you define a dict in dialyzer?
+        next_idx            :: list({raft_peer_id(), raft_log_idx()}),
+        match_idx           :: list({raft_peer_id(), raft_log_idx()})
         }).
 -type raft_state() :: #raft_state{}.
 
@@ -115,9 +140,5 @@
         vote_granted            :: 'undefined' | raft_peer_id()
         }).
 -type reply_request_votes() :: #rrv{}.
-
-%% ========================================================================
-%% Log related records
-%% ========================================================================
 
 
