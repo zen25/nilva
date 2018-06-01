@@ -1,3 +1,7 @@
+% Implements the log for Raft
+%
+% The log acts as a Write Ahead Log (WAL) for Resplicated State Machine (RSM)
+%
 -module(nilva_log_server).
 
 -behaviour(gen_server).

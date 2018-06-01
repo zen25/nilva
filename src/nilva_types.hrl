@@ -1,12 +1,6 @@
 % Contains records, types & macros
 %
 
-
-%% TODO: Extract these into a config file at a later point
--define(HEART_BEAT_TIMEOUT, 25).
--define(ELECTION_TIMEOUT, ?HEART_BEAT_TIMEOUT * 10).
--define(CLIENT_RESPONSE_TIMEOUT, 5000).     % Default
-
 %% ========================================================================
 %% Types
 %% ========================================================================
@@ -15,7 +9,7 @@
 % -type maybe(X) -> nil() | X.
 -type raft_term() :: non_neg_integer().
 -type raft_log_idx() :: non_neg_integer().
--type raft_peer_id() :: string().   % This is the node name.
+-type raft_peer_id() :: atom().   % This is the node name.
                                     % Note that we are sending the msgs to a locally
                                     % registered process on various nodes
 
@@ -76,8 +70,11 @@
 -record(raft_config, {
         peers                   :: list(raft_peer_id()),
         heart_beat_interval     :: timeout(),
-        election_timeout        :: timeout(),
-        old_config              :: 'undefined' | #raft_config{}
+        election_timeout_min    :: timeout(),
+        election_timeout_max    :: timeout(),
+        client_request_timeout  :: timeout(),
+        election_timeout        :: timeout(),       % Needs to be calculated
+        old_config              :: 'undefined' | raft_config()
         }).
 -type raft_config() :: #raft_config{}.
 
@@ -88,7 +85,7 @@
         log                 :: raft_log(),
         config              :: raft_config(),
 
-        % Volatile state on all server
+        % Voltile state on all server
         commit_idx = 0      :: raft_log_idx(),
         last_applied = 0    :: raft_log_idx(),      % Must be <= commit_idx
 

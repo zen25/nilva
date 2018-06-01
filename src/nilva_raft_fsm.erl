@@ -1,3 +1,5 @@
+% Implements the Raft Consensus algorithm
+%
 -module(nilva_raft_fsm).
 
 -behaviour(gen_statem).
@@ -67,6 +69,11 @@ join(_Peer) ->
 %% CALLBACKS (gen_statem)
 %% =========================================================================
 init(_Args) ->
+    % Read the config file, calculate election timeout and initialize raft state
+    % as follower. The cluster should become connected when the first election
+    % starts
+    ConfigFile = "nilva_cluster.config",
+    Config = nilva_config:read_config(ConfigFile),
     {ok, follower, []}.
 
 callback_mode() ->
