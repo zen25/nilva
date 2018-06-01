@@ -7,7 +7,7 @@
 -export([init/1, handle_call/3, handle_cast/2]).
 
 % For testing & debugging
--export([echo/1]).
+-export([echo/1, echo/2]).
 
 
 %% =========================================================================
@@ -24,7 +24,7 @@ init(_Args) ->
     {ok, []}.
 
 handle_call({echo, Msg}, _From, LoopData) ->
-    {reply, Msg, LoopData}.
+    {reply, {echo, ?MODULE, node(), Msg}, LoopData}.
 
 handle_cast({echo, Msg}, LoopData) ->
     io:format("handle_cast recieved: ~w", [Msg]),
@@ -36,3 +36,6 @@ handle_cast({echo, Msg}, LoopData) ->
 %% =========================================================================
 echo(Msg) ->
     gen_server:call(?MODULE, {echo, Msg}).
+
+echo(Msg, Node) ->
+    gen_server:call({?MODULE, Node}, {echo, Msg}).

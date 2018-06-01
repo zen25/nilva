@@ -18,7 +18,7 @@
 -export([leader/3, follower/3, candidate/3]).
 
 % For testing & debugging
--export([echo/1]).
+-export([echo/1, echo/2]).
 
 %% =========================================================================
 %% Public API for CLient to interact with RSM
@@ -177,15 +177,18 @@ leader(EventType, EventContent, State) ->
 %     % Send pings to all the peers and see if you get pong with given number of heartbeats
 %     false.
 
-handle_event({call, From}, Msg, State) ->
-    {keep_state_and_data, {reply, From, Msg}};
+handle_event({call, From}, {echo, Msg}, State) ->
+    {keep_state_and_data, {reply, From, {echo, ?MODULE, node(), Msg}}};
 handle_event(_, _, State) ->
     % Unknown event
     {keep_state_and_data, []}.
 
 %% =========================================================================
-%% Callbacks (gen_server)
+%% For testing & debugging
 %% =========================================================================
 echo(Msg) ->
     gen_statem:call(?MODULE, {echo, Msg}).
+
+echo(Msg, Node) ->
+    gen_statem:call({?MODULE, Node}, {echo, Msg}).
 

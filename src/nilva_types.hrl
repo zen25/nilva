@@ -15,7 +15,9 @@
 % -type maybe(X) -> nil() | X.
 -type raft_term() :: non_neg_integer().
 -type raft_log_idx() :: non_neg_integer().
--type raft_peer_id() :: string().
+-type raft_peer_id() :: string().   % This is the node name.
+                                    % Note that we are sending the msgs to a locally
+                                    % registered process on various nodes
 
 % Related to client requests to RSM
 %

@@ -55,6 +55,11 @@ Rebar3 comes with lots of features. Some things I was not aware of:
 
 See: (https://ferd.ca/rebar3-shell.html)
 
+##### Distributed Cluster
+
+We have a registered process, nilva_raft_fsm, on all nodes. So it is enough to store
+node ids to fully qualify the process.
+
 ---
 
 ### Annoying Errors and Their Fixes:
