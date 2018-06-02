@@ -74,7 +74,8 @@ init(_Args) ->
     % starts
     ConfigFile = "nilva_cluster.config",
     Config = nilva_config:read_config(ConfigFile),
-    {ok, follower, []}.
+    State = init_raft_state(Config),
+    {ok, follower, State}.
 
 callback_mode() ->
     state_functions.
@@ -186,9 +187,38 @@ leader(EventType, EventContent, State) ->
 
 handle_event({call, From}, {echo, Msg}, State) ->
     {keep_state_and_data, {reply, From, {echo, ?MODULE, node(), Msg}}};
+handle_event({call, From}, get_state, State) ->
+    {keep_state_and_data, {reply, From, State}};
 handle_event(_, _, State) ->
     % Unknown event
     {keep_state_and_data, []}.
+
+
+-spec init_raft_state(raft_config()) -> raft_state().
+init_raft_state(Config) ->
+    Peers = Config#raft_config.peers,
+    ElectionTimeOut = get_election_timeout(Config),
+    NextIdxMap = [{P, 0} || P <- Peers],
+    MatchIdxMap = [{P, 0} || P <- Peers],
+    #raft_state{
+        config = Config,
+        next_idx = NextIdxMap,
+        match_idx = MatchIdxMap,
+        election_timeout = ElectionTimeOut
+    }.
+
+
+-spec get_election_timeout(raft_config()) -> timeout().
+get_election_timeout(#raft_config{election_timeout_min=EMin,
+                     election_timeout_max=EMax})
+    when EMin > 0, EMax > EMin ->
+        round(EMin + (EMax - EMin) * rand:uniform()).
+
+
+-spec get_peers(raft_state()) -> list(raft_peer_id()).
+get_peers(#raft_state{config=#raft_config{peers=Peers}}) ->
+    Peers.
+
 
 %% =========================================================================
 %% For testing & debugging

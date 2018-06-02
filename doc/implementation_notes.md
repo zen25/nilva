@@ -44,12 +44,12 @@ In addition to that, we can have a peer forcefully start a new election.
 
 ### Dev Environment
 
-**Q**: What is the erlang's equivalent of `dir()` in Python?
+**Q**: What is the Erlang's equivalent of `dir()` in Python?
 
 ##### Rebar3
 
 Rebar3 comes with lots of features. Some things I was not aware of:
-    - "rebar3 shell" launches an interactice shell from which you can compile, run tests & run dialyzer
+    - "rebar3 shell" launches an interactive shell from which you can compile, run tests & run dialyzer
     - running dialyzer compiles the code. No need to do the compile step as a separate step
     - you can launch an app by " > rebar3 shell --apps nilva"
 
@@ -59,6 +59,13 @@ See: (https://ferd.ca/rebar3-shell.html)
 
 We have a registered process, nilva_raft_fsm, on all nodes. So it is enough to store
 node ids to fully qualify the process.
+
+##### Tidbits
+
+`random:uniform()` gives the same sequence of random numbers irrespective of the process. Use
+`rand:uniform()` instead if you do not want to set the seed. While rand's documentation do not
+recommend it for cryptographic applications, this should not matter much in this project as
+we are primarily using it to calculate election timeouts.
 
 ---
 

@@ -82,7 +82,8 @@
         % Persistent state on all servers
         current_term = 0    :: raft_term(),
         voted_for           :: 'undefined' | raft_peer_id(),
-        log                 :: raft_log(),
+        % log                 :: raft_log(),
+        % Note: There is a registered process for log
         config              :: raft_config(),
 
         % Voltile state on all server
@@ -90,9 +91,11 @@
         last_applied = 0    :: raft_log_idx(),      % Must be <= commit_idx
 
         % Volatile state on leaders
-        % TODO: How do you define a dict in dialyzer?
         next_idx            :: list({raft_peer_id(), raft_log_idx()}),
-        match_idx           :: list({raft_peer_id(), raft_log_idx()})
+        match_idx           :: list({raft_peer_id(), raft_log_idx()}),
+
+        % timeouts
+        election_timeout    :: timeout()   % calculated every term
         }).
 -type raft_state() :: #raft_state{}.
 
