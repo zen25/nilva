@@ -33,18 +33,23 @@ convertToConfigRecord(List) ->
     VT = validate_timeouts(HeartBeatInterval, ElectionTimeOutMin, ElectionTimeOutMax,
                            ClientRequestTimeOut),
 
-    case VP and VT of
+    case VP of
         true ->
-            #raft_config
-                {
-                peers = proplists:get_value(peers, List),
-                heart_beat_interval = proplists:get_value(heart_beat_interval, List),
-                election_timeout_min = proplists:get_value(election_timeout_min, List),
-                election_timeout_max = proplists:get_value(election_timeout_max, List),
-                client_request_timeout = proplists:get_value(client_request_timeout, List)
-                };
+            case VT of
+                true ->
+                    #raft_config
+                        {
+                        peers = proplists:get_value(peers, List),
+                        heart_beat_interval = proplists:get_value(heart_beat_interval, List),
+                        election_timeout_min = proplists:get_value(election_timeout_min, List),
+                        election_timeout_max = proplists:get_value(election_timeout_max, List),
+                        client_request_timeout = proplists:get_value(client_request_timeout, List)
+                        };
+                false ->
+                    {error, "Invalid config for timeouts"}
+            end;
         false ->
-            {error, "Invalid Config"}
+            {error, "Invalid config for peers"}
     end.
 
 
@@ -57,7 +62,7 @@ validate_peers(Peers) when is_list(Peers) ->
 -spec validate_timeouts(any(), any(), any(), any()) -> boolean().
 validate_timeouts(H, Emin, Emax, CRT)
     when is_integer(H), is_integer(Emin), is_integer(Emax), is_integer(CRT) ->
-        L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emax < Emin, H < Emin, CRT < Emin],
+        L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emin < Emax, H < Emin, CRT < Emin],
         lists:all(fun(X) -> X and true end, L).
 
 

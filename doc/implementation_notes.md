@@ -79,6 +79,16 @@ we are primarily using it to calculate election timeouts.
 
 You most likely have "..app.src" instead of "appname.app.src"
 
+**Error**:
+
+** exception error: undefined function lager:error/1
+
+**FIX**:
+
+Move deps line rebar.config before erl_opts line.
+See (http://lists.basho.com/pipermail/riak-users_lists.basho.com/2013-January/010732.html)
+
+
 
 ---
 

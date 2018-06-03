@@ -76,17 +76,14 @@ init(_Args) ->
     ConfigFile = "nilva_cluster.config",
     case nilva_config:read_config(ConfigFile) of
         {error, Error} ->
-            % Dialyzer complains about the `lager:error` code.
-            % While the stackoverflow below seems like it provides a solution,
-            % I have no fucking clue what it means.
-            %
-            % https://stackoverflow.com/questions/20405141/how-do-i-get-dialyzer-to-ignore-certain-unexported-functions?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-            % TODO: Figure this out. It is ridiculous that logging throws type errors
-            io:format(Error),
-            % lager:error("Startup Error ~s", Error),
+            % Dialyzer still complains about the lager code
+            lager:error("Startup Error ~p", [Error]),
             {ok, follower, []};
         Config ->
             State = init_raft_state(Config),
+            % TODO: Dialyzer still throws warnings w.r.t lager
+            lager:info("Started node:~p with election_timeout:~p",
+                       [node(), State#raft_state.election_timeout]),
             {ok, follower, State}
     end.
 
