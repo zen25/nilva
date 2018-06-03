@@ -77,12 +77,12 @@ init(_Args) ->
     case nilva_config:read_config(ConfigFile) of
         {error, Error} ->
             % Dialyzer still complains about the lager code
-            lager:error("Startup Error ~p", [Error]),
+            _Ignore = lager:error("Startup Error ~p", [Error]),
             {ok, follower, []};
         Config ->
             State = init_raft_state(Config),
             % TODO: Dialyzer still throws warnings w.r.t lager
-            lager:info("Started node:~p with election_timeout:~p",
+            _Ignore = lager:info("Started node:~p with election_timeout:~p",
                        [node(), State#raft_state.election_timeout]),
             {ok, follower, State}
     end.
@@ -211,8 +211,7 @@ broadcast_append_entries(Entries, State) ->
     Peers = get_peers(State),
     % Peers = nodes(),
     AE = #ae{},
-    lists:foreach(fun(Node) -> gen_statem:cast({?MODULE, Node}, AE) end, Peers),
-    ok.
+    lists:foreach(fun(Node) -> gen_statem:cast({?MODULE, Node}, AE) end, Peers).
 
 
 % -spec broadcast_request_votes(raft_state()) -> ok.
@@ -220,7 +219,7 @@ broadcast_append_entries(Entries, State) ->
 broadcast_request_votes(State) ->
     Peers = get_peers(State),
     RV = #rv{},
-    lists:foreach(fun(Node) -> cast(Node, RV) end, Peers).
+    lists:foreach(fun(Node) -> cast(Node, RV), ok end, Peers).
 
 
 -spec cast(node(), any()) -> no_return().
