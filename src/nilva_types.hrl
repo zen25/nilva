@@ -9,7 +9,7 @@
 % -type maybe(X) -> nil() | X.
 -type raft_term() :: non_neg_integer().
 -type raft_log_idx() :: non_neg_integer().
--type raft_peer_id() :: atom().   % This is the node name.
+-type raft_peer_id() :: node().     % This is the node name.
                                     % Note that we are sending the msgs to a locally
                                     % registered process on various nodes
 
@@ -55,7 +55,7 @@
 -type storage() :: file_name().
 
 -record(raft_log, {
-        log_entries     :: list(log_entry),
+        log_entries     :: list(log_entry()),
         storage         :: storage(),
         last_applied    :: log_sequence_number(),
         last_committed  :: log_sequence_number(),
@@ -72,9 +72,7 @@
         heart_beat_interval     :: timeout(),
         election_timeout_min    :: timeout(),
         election_timeout_max    :: timeout(),
-        client_request_timeout  :: timeout(),
-        election_timeout        :: timeout(),       % Needs to be calculated
-        old_config              :: 'undefined' | raft_config()
+        client_request_timeout  :: timeout()
         }).
 -type raft_config() :: #raft_config{}.
 

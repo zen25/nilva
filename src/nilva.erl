@@ -11,6 +11,7 @@ echo_log(Msg) ->
 echo_fsm(Msg) ->
     nilva_raft_fsm:echo(Msg).
 
+-spec echo_fsm_all(string(), list()) -> list().
 echo_fsm_all(Msg, Nodes) ->
     [nilva_raft_fsm:echo(Msg, N) || N <- Nodes].
 

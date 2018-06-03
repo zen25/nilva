@@ -72,6 +72,7 @@ init(_Args) ->
     % Read the config file, calculate election timeout and initialize raft state
     % as follower. The cluster should become connected when the first election
     % starts
+    lager:start(),
     ConfigFile = "nilva_cluster.config",
     Config = nilva_config:read_config(ConfigFile),
     State = init_raft_state(Config),
@@ -136,6 +137,7 @@ follower({cast, From}, election_timeout, State) ->
     % Start an election and switch to candidate
     % NewState = startElection(State),
     % {next_state, candidate, NewState}.
+    % broadcast_request_votes(State),
     {next_state, candidate, State};
 follower(EventType, EventContent, State) ->
     % Handle the rest
@@ -194,17 +196,36 @@ handle_event(_, _, State) ->
     {keep_state_and_data, []}.
 
 
+% -spec broadcast_append_entries(list(), raft_state()) -> ok.
+% TODO: Figure out the dialyzer error thrown by the above spec
+broadcast_append_entries(Entries, State) ->
+    Peers = get_peers(State),
+    % Peers = nodes(),
+    AE = #ae{},
+    lists:foreach(fun(Node) -> gen_statem:cast({?MODULE, Node}, AE) end, Peers),
+    ok.
+
+
+% -spec broadcast_request_votes(raft_state()) -> ok.
+% TODO: Figure out the dialyzer error thrown by the above spec
+broadcast_request_votes(State) ->
+    Peers = get_peers(State),
+    RV = #rv{},
+    lists:foreach(fun(Node) -> cast(Node, RV) end, Peers).
+
+
+-spec cast(node(), any()) -> no_return().
+cast(Node, Msg) ->
+    gen_statem:cast({?MODULE, Node}, Msg).
+
 -spec init_raft_state(raft_config()) -> raft_state().
 init_raft_state(Config) ->
     Peers = Config#raft_config.peers,
-    ElectionTimeOut = get_election_timeout(Config),
-    NextIdxMap = [{P, 0} || P <- Peers],
-    MatchIdxMap = [{P, 0} || P <- Peers],
     #raft_state{
         config = Config,
-        next_idx = NextIdxMap,
-        match_idx = MatchIdxMap,
-        election_timeout = ElectionTimeOut
+        next_idx = [{P, 0} || P <- Peers],
+        match_idx = [{P, 0} || P <- Peers],
+        election_timeout = get_election_timeout(Config)
     }.
 
 
