@@ -72,11 +72,23 @@ init(_Args) ->
     % Read the config file, calculate election timeout and initialize raft state
     % as follower. The cluster should become connected when the first election
     % starts
-    lager:start(),
+    % lager:start(),
     ConfigFile = "nilva_cluster.config",
-    Config = nilva_config:read_config(ConfigFile),
-    State = init_raft_state(Config),
-    {ok, follower, State}.
+    case nilva_config:read_config(ConfigFile) of
+        {error, Error} ->
+            % Dialyzer complains about the `lager:error` code.
+            % While the stackoverflow below seems like it provides a solution,
+            % I have no fucking clue what it means.
+            %
+            % https://stackoverflow.com/questions/20405141/how-do-i-get-dialyzer-to-ignore-certain-unexported-functions?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
+            % TODO: Figure this out. It is ridiculous that logging throws type errors
+            io:format(Error),
+            % lager:error("Startup Error ~s", Error),
+            {ok, follower, []};
+        Config ->
+            State = init_raft_state(Config),
+            {ok, follower, State}
+    end.
 
 callback_mode() ->
     state_functions.
