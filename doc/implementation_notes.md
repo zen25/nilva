@@ -116,6 +116,8 @@ In Erlang's `gen_statem`, if the `next_state` is the same as the current state, 
 considered a state change. Hence, the timers are not reset here. We need to do explicitly
 reset the election timeout timer in such cases.
 
+Less than or equal to is "=<" in Erlang.
+
 ---
 
 ### Annoying Errors and Their Fixes:

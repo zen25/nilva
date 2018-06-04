@@ -103,42 +103,14 @@ terminate(_Reason, _StateName, _LoopData) ->
 %% STATES
 %% =========================================================================
 
-% TODO: For now, the events are named explictly. This is not possible in the
-%       actual implementation.
-%       We can have the handle_event handle all the responses for RequestVotes
-%       and AppendEntries from the Peers and send a message to self() if the
-%       corresponding event arises. But the problem is messages are handled in
-%       order of their receival in the mailbox. So we might have processed some
-%       responses fron peers we should not have processed before we make the state
-%       state transistion. This will lead to bugs
-%
-%       So, the states themselves should handle the response for RequestVotes and
-%       AppendEntries rpcs from the Peers.
-%       They should also handle the requests from the various clients
-
-
-%% Events
-%%
-%% 1. AppendEntries
-%% 2. RequestVotes
-%% 3. Replies for AppendEntries (Ack/Nack)
-%% 4. Replies for RequestVotes (Ack/Nack)
-%% 5. TimeOuts (HeartBeats when leader, Election Timeouts when candidate/follower)
-%% 6. Client Requests to RSM
-%% 7. Config Management Commands
-%% 8. Stop commands
-%% 9. Test commands (like drop next N messages, drop 5% of messages etc.)
-%%
-%% Each of the above must be handled in every state
-%%
 
 % Follower state callback
 %
 % Invalid Config
 follower(_, _, []) ->
-    Err = "Server was not started properly. Please restart it with a valid config file",
-    _Ignore = lager:error(Err),
-    {next_state, follower, []};
+    Error = "Server was not started properly. Please restart it with a valid config file",
+    _Ignore = lager:error(Error),
+    {stop, {error, Error}};
 % State change (leader -> follower)
 follower(enter, leader, Data) ->
     % Turn off the heart beat timer & start the election timer
@@ -161,18 +133,28 @@ follower({timeout, election_timeout}, election_timeout, Data) ->
     _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
                          [node(), election, Data#raft.current_term + 1]),
     {next_state, candidate, Data};
-% Append Entries request
-follower(cast, #ae{}, Data) ->
-    % Process the data and reset election timer if it is from legitimate leader or
-    % reject the append entries from stale leader but do not reset the election
-    % timer
-    ResetElectionTimer = {{timeout, election_timeout},
-                         Data#raft.election_timeout, election_timeout},
-    {keep_state, Data, [ResetElectionTimer]};
-% Request Votes request
-follower(cast, #rv{}, Data) ->
-    % Grant the vote if already not given but do not reset election timer
-    {keep_state_and_data, []};
+% Append Entries request (valid)
+follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
+    when FT =< LT ->
+        % Process the data and reset election timer if it is from legitimate leader
+        ResetElectionTimer = {{timeout, election_timeout},
+                             Data#raft.election_timeout, election_timeout},
+        {keep_state, Data, [ResetElectionTimer]};
+% Append Entries request (in-valid)
+follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
+    when FT > LT ->
+        % Stale leader, reject the append entries
+        {keep_state_and_data, []};
+% Request Votes request (valid)
+follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
+    when FT < CT ->
+        % Grant the vote if already not given but do not reset election timer
+        {keep_state, Data, []};
+% Request Votes request (in-valid)
+follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
+    when FT >= CT ->
+        % Grant the vote if already not given but do not reset election timer
+        {keep_state, Data, []};
 % Stale Messages
 % Heartbeats are not valid in follower state. Follower is passive
 follower({timeout, heartbeat_timeout}, heartbeat_timeout, _) ->
@@ -189,6 +171,8 @@ follower(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
 
+
+
 % Candidate state callback
 %
 % State Change (follower -> candidate)
@@ -201,8 +185,9 @@ candidate(enter, follower, Data) ->
     {next_state, candidate, Data, [ResetElectionTimer]};
 % Invalid State Change (leader x-> candidate)
 candidate(enter, leader, _) ->
-    _Ignore = lager:error("Cannot become a candidate from a leader"),
-    {keep_state_and_data, []};
+    Error = "Cannot become a candidate from a leader",
+    _Ignore = lager:error(Error),
+    {stop, {error, Error}};
 % Election timeout
 candidate({timeout, election_timeout}, election_timeout, Data) ->
     % Start a new election
@@ -238,10 +223,11 @@ leader(enter, candidate, Data) ->
     TurnOffElectionTimeout = {{timeout, election_timeout},
                              infinity, election_timeout},
     {keep_state_and_data, [TurnOnHeartBeat, TurnOffElectionTimeout]};
-% Invalid State Chnage (follower x-> leader)
+% Invalid State Change (follower x-> leader)
 leader(enter, follower, Data) ->
-    _Ignore = lager:error("Cannot become a leader from a follower"),
-    {keep_state_and_data, []};
+     Error = "Cannot become a leader from a follower",
+    _Ignore = lager:error(Error),
+    {stop, {error, Error}};
 leader({cast, From}, discoveredHigherTerm, Data) ->
     {next_state, follower, Data};
 leader(EventType, EventContent, Data) ->
