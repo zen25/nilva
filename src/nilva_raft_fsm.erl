@@ -72,7 +72,6 @@ init(_Args) ->
     % Read the config file, calculate election timeout and initialize raft state
     % as follower. The cluster should become connected when the first election
     % starts
-    % lager:start(),
     ConfigFile = "nilva_cluster.config",
     case nilva_config:read_config(ConfigFile) of
         {error, Error} ->
@@ -80,15 +79,17 @@ init(_Args) ->
             _Ignore = lager:error("Startup Error ~p", [Error]),
             {ok, follower, []};
         Config ->
-            State = init_raft_state(Config),
+            Data = init_raft_state(Config),
             % TODO: Dialyzer still throws warnings w.r.t lager
-            _Ignore = lager:info("Started node:~p with election_timeout:~p",
-                       [node(), State#raft_state.election_timeout]),
-            {ok, follower, State}
+            _Ignore = lager:info("Started {node:~p} with {election_timeout:~p}",
+                       [node(), Data#raft.election_timeout]),
+            ElectionTimeOutAction = {{timeout, election_timeout},
+                                    Data#raft.election_timeout, election_timeout },
+            {ok, follower, Data, [ElectionTimeOutAction]}
     end.
 
 callback_mode() ->
-    state_functions.
+    [state_functions, state_enter].
 
 handle_sync_event(stop, _From, _State, LoopData) ->
     {stop, normal, LoopData}.
@@ -131,63 +132,121 @@ terminate(_Reason, _StateName, _LoopData) ->
 %% Each of the above must be handled in every state
 %%
 
-
-% TODO: Too Many terms. Use a record to make the code concise
-% follower({append_entries, LTerm, LId, PrevLogIdx, PrevLogTerm, Entries, LCommitIdx},
-%          State) ->
-%     % if
-%     %     LTerm < FTerm ->
-%     %         LId ! {reply_append_entries, FTerm, false};
-%     %     true ->
-%     %         Reply = nilva_raft_helper:handle_append_entries()
-%     % end,
-%     {next_state, follower, State};
-follower({cast, From}, election_timeout, State) ->
-    % Start an election and switch to candidate
-    % NewState = startElection(State),
-    % {next_state, candidate, NewState}.
-    % broadcast_request_votes(State),
-    {next_state, candidate, State};
-follower(EventType, EventContent, State) ->
+% Follower state callback
+%
+% Invalid Config
+follower(_, _, []) ->
+    Err = "Server was not started properly. Please restart it with a valid config file",
+    _Ignore = lager:error(Err),
+    {next_state, follower, []};
+% State change (leader -> follower)
+follower(enter, leader, Data) ->
+    % Turn off the heart beat timer & start the election timer
+    % The next event processed must be post-poned event
+    TurnOffHeartBeat = {{timeout, heartbeat_timeout},
+                        infinity,
+                        heartbeat_timeout
+                        },
+    TurnOnElectionTimeout = {{timeout, election_timeout},
+                             Data#raft.election_timeout, election_timeout},
+    {keep_state_and_data, [TurnOffHeartBeat, TurnOnElectionTimeout]};
+% State change (candidate -> follower)
+follower(enter, candidate, Data) ->
+    % Reset the election timer and process the post-poned event
+    ResetElectionTimer = {{timeout, election_timeout},
+                         Data#raft.election_timeout, election_timeout},
+    {keep_state_and_data, [ResetElectionTimer]};
+% Election timeout
+follower({timeout, election_timeout}, election_timeout, Data) ->
+    _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
+                         [node(), election, Data#raft.current_term + 1]),
+    {next_state, candidate, Data};
+% Append Entries request
+follower(cast, #ae{}, Data) ->
+    % Process the data and reset election timer if it is from legitimate leader or
+    % reject the append entries from stale leader but do not reset the election
+    % timer
+    ResetElectionTimer = {{timeout, election_timeout},
+                         Data#raft.election_timeout, election_timeout},
+    {keep_state, Data, [ResetElectionTimer]};
+% Request Votes request
+follower(cast, #rv{}, Data) ->
+    % Grant the vote if already not given but do not reset election timer
+    {keep_state_and_data, []};
+% Stale Messages
+% Heartbeats are not valid in follower state. Follower is passive
+follower({timeout, heartbeat_timeout}, heartbeat_timeout, _) ->
+    {keep_state_and_data, []};
+% Ignoring replies to Append Entries
+follower(cast, #rae{}, _) ->
+    {keep_state_and_data, []};
+% Ignoring replies to Request Votes
+follower(cast, #rrv{}, _) ->
+    {keep_state_and_data, []};
+% TODO: Handle client request -> redirect to known leader if it exists
+% Events not part of Raft
+follower(EventType, EventContent, Data) ->
     % Handle the rest
-    handle_event(EventType, EventContent, State).
+    handle_event(EventType, EventContent, Data).
 
-
-% candidate(quorumAchieved, State) ->
-%     IgnoreStaleMsg = nilva_raft_helper:CheckForStaleMessages(quorumAchieved),
-%     if
-%         IgnoreStaleMsg ->
-%             {next_state, leader, State};
-%         true ->
-%             QuorumReached, NewState = nilva_raft_helper:waitForQuorum(State),
-%             if
-%                 QuorumReached ->
-%                     % Establish your authority as leader and switch to leader state
-%                     sendHeartBeatNoOp(NewState),
-%                     {next_state, leader, NewState};
-%                 true ->
-%                     {next_state, candidate, NewState}
-%             end
-%     end;
-% candidate({cast, From}, discoveredNewLeader, State) ->
-%     {next_state, follower, State};
-% candidate(discoveredHigherTerm, State) ->
-%     {next_state, follower, State};
-candidate({cast, From}, election_timeout, State) ->
+% Candidate state callback
+%
+% State Change (follower -> candidate)
+candidate(enter, follower, Data) ->
+    _Ignore = lager:info("Starting election"),
+    % Increase the term, broadcast request votes, and reset election timer
+    % TODO: Recalculate election timeout
+    ResetElectionTimer = {{timeout, election_timeout},
+                         Data#raft.election_timeout, election_timeout},
+    {next_state, candidate, Data, [ResetElectionTimer]};
+% Invalid State Change (leader x-> candidate)
+candidate(enter, leader, _) ->
+    _Ignore = lager:error("Cannot become a candidate from a leader"),
+    {keep_state_and_data, []};
+% Election timeout
+candidate({timeout, election_timeout}, election_timeout, Data) ->
     % Start a new election
-    {next_state, candidate, State};
-candidate(EventType, EventContent, State) ->
+    % TODO: Recalculate election timeout
+    NewData = Data#raft{
+                        current_term = Data#raft.current_term + 1,
+                        election_timeout = get_election_timeout(Data#raft.config)
+                        },
+    _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
+                         [node(), election, NewData#raft.current_term]),
+    ResetElectionTimer = {{timeout, election_timeout},
+                         NewData#raft.election_timeout, election_timeout},
+    {next_state, candidate, NewData, [ResetElectionTimer]};
+% Request Votes reply
+candidate(cast, #rrv{}, Data) ->
+    % Collect the votes and see if you can become the leader
+    {keep_state_and_data, []};
+candidate(EventType, EventContent, Data) ->
     % Handle the rest
-    handle_event(EventType, EventContent, State).
+    handle_event(EventType, EventContent, Data).
 
 
-% leader(handleClientRequest, State) ->
-%     {next_state, leader, State};
-leader({cast, From}, discoveredHigherTerm, State) ->
-    {next_state, follower, State};
-leader(EventType, EventContent, State) ->
+% State Change (candidate -> leader)
+leader(enter, candidate, Data) ->
+    % Send out a no op to establish your authority,
+    % stop the election timer and restart the heartbeat timer
+    % Turn off the heart beat timer & start the election timer
+    % The next event processed must be post-poned event
+    TurnOnHeartBeat = {{timeout, heartbeat_timeout},
+                        Data#raft.config#raft_config.heart_beat_interval,
+                        heartbeat_timeout
+                        },
+    TurnOffElectionTimeout = {{timeout, election_timeout},
+                             infinity, election_timeout},
+    {keep_state_and_data, [TurnOnHeartBeat, TurnOffElectionTimeout]};
+% Invalid State Chnage (follower x-> leader)
+leader(enter, follower, Data) ->
+    _Ignore = lager:error("Cannot become a leader from a follower"),
+    {keep_state_and_data, []};
+leader({cast, From}, discoveredHigherTerm, Data) ->
+    {next_state, follower, Data};
+leader(EventType, EventContent, Data) ->
     % Handle the rest
-    handle_event(EventType, EventContent, State).
+    handle_event(EventType, EventContent, Data).
 
 %% =========================================================================
 %% Helpers (Private)
@@ -196,30 +255,30 @@ leader(EventType, EventContent, State) ->
 %     % Send pings to all the peers and see if you get pong with given number of heartbeats
 %     false.
 
-handle_event({call, From}, {echo, Msg}, State) ->
+handle_event({call, From}, {echo, Msg}, Data) ->
     {keep_state_and_data, {reply, From, {echo, ?MODULE, node(), Msg}}};
-handle_event({call, From}, get_state, State) ->
-    {keep_state_and_data, {reply, From, State}};
-handle_event(_, _, State) ->
+handle_event({call, From}, get_state, Data) ->
+    {keep_state_and_data, {reply, From, Data}};
+handle_event(_, _, Data) ->
     % Unknown event
     {keep_state_and_data, []}.
 
 
-% -spec broadcast_append_entries(list(), raft_state()) -> ok.
+-spec broadcast_append_entries(list(), raft_state()) -> ok.
 % TODO: Figure out the dialyzer error thrown by the above spec
-broadcast_append_entries(Entries, State) ->
-    Peers = get_peers(State),
+broadcast_append_entries(Entries, Data) ->
+    Peers = get_peers(Data),
     % Peers = nodes(),
     AE = #ae{},
-    lists:foreach(fun(Node) -> gen_statem:cast({?MODULE, Node}, AE) end, Peers).
+    lists:foreach(fun(Node) -> cast(Node, AE) end, Peers).
 
 
-% -spec broadcast_request_votes(raft_state()) -> ok.
+-spec broadcast_request_votes(raft_state()) -> ok.
 % TODO: Figure out the dialyzer error thrown by the above spec
-broadcast_request_votes(State) ->
-    Peers = get_peers(State),
+broadcast_request_votes(Data) ->
+    Peers = get_peers(Data),
     RV = #rv{},
-    lists:foreach(fun(Node) -> cast(Node, RV), ok end, Peers).
+    lists:foreach(fun(Node) -> cast(Node, RV) end, Peers).
 
 
 -spec cast(node(), any()) -> no_return().
@@ -229,7 +288,7 @@ cast(Node, Msg) ->
 -spec init_raft_state(raft_config()) -> raft_state().
 init_raft_state(Config) ->
     Peers = Config#raft_config.peers,
-    #raft_state{
+    #raft{
         config = Config,
         next_idx = [{P, 0} || P <- Peers],
         match_idx = [{P, 0} || P <- Peers],
@@ -245,7 +304,7 @@ get_election_timeout(#raft_config{election_timeout_min=EMin,
 
 
 -spec get_peers(raft_state()) -> list(raft_peer_id()).
-get_peers(#raft_state{config=#raft_config{peers=Peers}}) ->
+get_peers(#raft{config=#raft_config{peers=Peers}}) ->
     Peers.
 
 

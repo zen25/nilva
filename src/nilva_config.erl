@@ -39,11 +39,11 @@ convertToConfigRecord(List) ->
                 true ->
                     #raft_config
                         {
-                        peers = proplists:get_value(peers, List),
-                        heart_beat_interval = proplists:get_value(heart_beat_interval, List),
-                        election_timeout_min = proplists:get_value(election_timeout_min, List),
-                        election_timeout_max = proplists:get_value(election_timeout_max, List),
-                        client_request_timeout = proplists:get_value(client_request_timeout, List)
+                        peers = Peers,
+                        heart_beat_interval = HeartBeatInterval,
+                        election_timeout_min = ElectionTimeOutMin,
+                        election_timeout_max = ElectionTimeOutMax,
+                        client_request_timeout = ClientRequestTimeOut
                         };
                 false ->
                     {error, "Invalid config for timeouts"}
@@ -51,7 +51,6 @@ convertToConfigRecord(List) ->
         false ->
             {error, "Invalid config for peers"}
     end.
-
 
 % private
 -spec validate_peers(any()) -> boolean().

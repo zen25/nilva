@@ -76,7 +76,7 @@
         }).
 -type raft_config() :: #raft_config{}.
 
--record(raft_state, {
+-record(raft, {
         % Persistent state on all servers
         current_term = 0    :: raft_term(),
         voted_for           :: 'undefined' | raft_peer_id(),
@@ -95,7 +95,7 @@
         % timeouts
         election_timeout    :: timeout()   % calculated every term
         }).
--type raft_state() :: #raft_state{}.
+-type raft_state() :: #raft{}.
 
 
 
