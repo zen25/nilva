@@ -12,6 +12,7 @@
 -type raft_peer_id() :: node().     % This is the node name.
                                     % Note that we are sending the msgs to a locally
                                     % registered process on various nodes
+-type raft_commands() :: 'reload_config' | 'no_op'.
 
 % Related to client requests to RSM
 %
@@ -32,7 +33,7 @@
 % Related to the log & log entries
 %
 -type log_sequence_number() :: non_neg_integer().
--type entry() :: any().
+-type entry() :: client_request() | raft_commands().
 -type status() :: volatile | durable | committed | applied.
 -type rsm_response() :: 'undefined' | string().
 
@@ -88,6 +89,11 @@
         commit_idx = 0      :: raft_log_idx(),
         last_applied = 0    :: raft_log_idx(),      % Must be <= commit_idx
 
+        % Volatile state on candidates
+        % Number of elements in these two must equal number of peers or less
+        votes_received      :: list(raft_peer_id()),
+        votes_rejected      :: list(raft_peer_id()),
+
         % Volatile state on leaders
         next_idx            :: list({raft_peer_id(), raft_log_idx()}),
         match_idx           :: list({raft_peer_id(), raft_log_idx()}),
@@ -135,9 +141,13 @@
 
 
 % Request Votes Reply
+%
+% Note that when a peer grants it vote, it updates its term to that of the candidate
+% So, resending the message to the candidate becomes idempotent for that term
 -record(rrv, {
         peers_current_term      :: raft_term(),
-        vote_granted            :: 'undefined' | raft_peer_id()
+        peer_id                 :: raft_peer_id(),
+        vote_granted            :: boolean()
         }).
 -type reply_request_votes() :: #rrv{}.
 

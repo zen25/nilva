@@ -115,32 +115,28 @@ follower(_, _, []) ->
 follower(enter, leader, Data) ->
     % Turn off the heart beat timer & start the election timer
     % The next event processed must be post-poned event
-    TurnOffHeartBeat = {{timeout, heartbeat_timeout},
-                        infinity,
-                        heartbeat_timeout
-                        },
-    TurnOnElectionTimeout = {{timeout, election_timeout},
-                             Data#raft.election_timeout, election_timeout},
-    {keep_state_and_data, [TurnOffHeartBeat, TurnOnElectionTimeout]};
+    {keep_state_and_data,
+        [stop_heartbeat_timer(Data), start_election_timer(Data)]};
 % State change (candidate -> follower)
 follower(enter, candidate, Data) ->
     % Reset the election timer and process the post-poned event
-    ResetElectionTimer = {{timeout, election_timeout},
-                         Data#raft.election_timeout, election_timeout},
-    {keep_state_and_data, [ResetElectionTimer]};
+    {keep_state_and_data,
+        [stop_heartbeat_timer(Data), reset_election_timer(Data)]};
 % Election timeout
 follower({timeout, election_timeout}, election_timeout, Data) ->
+
     _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
                          [node(), election, Data#raft.current_term + 1]),
-    {next_state, candidate, Data};
+    NewData = start_election(Data),
+    {next_state, candidate, NewData,
+        [start_heartbeat_timer(NewData)]};
 % Append Entries request (valid)
 follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
     when FT =< LT ->
         % Process the data and reset election timer if it is from legitimate leader
-        ResetElectionTimer = {{timeout, election_timeout},
-                             Data#raft.election_timeout, election_timeout},
-        {keep_state, Data, [ResetElectionTimer]};
-% Append Entries request (in-valid)
+        {keep_state, Data,
+            [reset_election_timer(Data)]};
+% Append Entries request (invalid)
 follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
     when FT > LT ->
         % Stale leader, reject the append entries
@@ -150,10 +146,10 @@ follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
     when FT < CT ->
         % Grant the vote if already not given but do not reset election timer
         {keep_state, Data, []};
-% Request Votes request (in-valid)
+% Request Votes request (invalid)
 follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
     when FT >= CT ->
-        % Grant the vote if already not given but do not reset election timer
+        % Deny the vote
         {keep_state, Data, []};
 % Stale Messages
 % Heartbeats are not valid in follower state. Follower is passive
@@ -178,11 +174,9 @@ follower(EventType, EventContent, Data) ->
 % State Change (follower -> candidate)
 candidate(enter, follower, Data) ->
     _Ignore = lager:info("Starting election"),
-    % Increase the term, broadcast request votes, and reset election timer
-    % TODO: Recalculate election timeout
-    ResetElectionTimer = {{timeout, election_timeout},
-                         Data#raft.election_timeout, election_timeout},
-    {next_state, candidate, Data, [ResetElectionTimer]};
+
+    {next_state, candidate, Data,
+        [start_heartbeat_timer(Data), reset_election_timer(Data)]};
 % Invalid State Change (leader x-> candidate)
 candidate(enter, leader, _) ->
     Error = "Cannot become a candidate from a leader",
@@ -191,16 +185,21 @@ candidate(enter, leader, _) ->
 % Election timeout
 candidate({timeout, election_timeout}, election_timeout, Data) ->
     % Start a new election
-    % TODO: Recalculate election timeout
-    NewData = Data#raft{
-                        current_term = Data#raft.current_term + 1,
-                        election_timeout = get_election_timeout(Data#raft.config)
-                        },
+    NewData = start_election(Data),
     _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
                          [node(), election, NewData#raft.current_term]),
-    ResetElectionTimer = {{timeout, election_timeout},
-                         NewData#raft.election_timeout, election_timeout},
-    {next_state, candidate, NewData, [ResetElectionTimer]};
+    {next_state, candidate, NewData,
+        [reset_heartbeat_timer(NewData), start_election_timer(NewData)]};
+% Heartbeat timeout
+candidate({timeout, heartbeat_timeout}, heartbeat_timeout, Data) ->
+    % Resend request votes for peers who did not reply & start heart beat timer again
+    _Ignore = lager:info("{node:~p} {event:~p} {term:~p}",
+                         [node(), resending_request_votes, Data#raft.current_term]),
+    resend_request_votes(Data),
+    {keep_state_and_data, [start_heartbeat_timer(Data)]};
+% Append Entries reply
+% Request Votes request
+% Append Entries reply
 % Request Votes reply
 candidate(cast, #rrv{}, Data) ->
     % Collect the votes and see if you can become the leader
@@ -216,13 +215,8 @@ leader(enter, candidate, Data) ->
     % stop the election timer and restart the heartbeat timer
     % Turn off the heart beat timer & start the election timer
     % The next event processed must be post-poned event
-    TurnOnHeartBeat = {{timeout, heartbeat_timeout},
-                        Data#raft.config#raft_config.heart_beat_interval,
-                        heartbeat_timeout
-                        },
-    TurnOffElectionTimeout = {{timeout, election_timeout},
-                             infinity, election_timeout},
-    {keep_state_and_data, [TurnOnHeartBeat, TurnOffElectionTimeout]};
+    {keep_state_and_data,
+        [start_heartbeat_timer(Data), stop_election_timer(Data)]};
 % Invalid State Change (follower x-> leader)
 leader(enter, follower, Data) ->
      Error = "Cannot become a leader from a follower",
@@ -250,32 +244,63 @@ handle_event(_, _, Data) ->
     {keep_state_and_data, []}.
 
 
--spec broadcast_append_entries(list(), raft_state()) -> ok.
-% TODO: Figure out the dialyzer error thrown by the above spec
-broadcast_append_entries(Entries, Data) ->
-    Peers = get_peers(Data),
-    % Peers = nodes(),
-    AE = #ae{},
-    lists:foreach(fun(Node) -> cast(Node, AE) end, Peers).
-
-
--spec broadcast_request_votes(raft_state()) -> ok.
-% TODO: Figure out the dialyzer error thrown by the above spec
-broadcast_request_votes(Data) ->
-    Peers = get_peers(Data),
-    RV = #rv{},
-    lists:foreach(fun(Node) -> cast(Node, RV) end, Peers).
+% TODO: Fix the dialyzer error "Created function has no local return"
+-spec broadcast(list(raft_peer_id()), any()) -> no_return().
+broadcast(Peers, Msg) ->
+    lists:foreach(fun(Node) -> cast(Node, Msg) end, Peers).
 
 
 -spec cast(node(), any()) -> no_return().
 cast(Node, Msg) ->
     gen_statem:cast({?MODULE, Node}, Msg).
 
+% Election related
+-spec start_election(raft_state()) -> raft_state().
+start_election(R = #raft{current_term=T}) ->
+    Peers = get_peers(R),
+    % TODO: Persist the two below
+    NewR = R#raft{
+                current_term = T + 1,
+                voted_for = node(),
+                % Calculate new election timeout for next term
+                election_timeout = get_election_timeout(R#raft.config)
+                },
+    RV = #rv{
+             candidates_term = NewR#raft.current_term,
+             candidate_id = NewR#raft.voted_for,
+             last_log_idx = get_previous_log_idx(),
+             last_log_term = get_previous_log_term()
+            },
+    broadcast(Peers, RV),
+    NewR.
+
+% Election related
+-spec resend_request_votes(raft_state()) -> no_return().
+resend_request_votes(R = #raft{votes_received=PTrue, votes_rejected=PFalse}) ->
+    Peers = get_peers(R),
+    Unresponsive_peers = Peers -- (PTrue ++ PFalse),
+    RV = #rv{
+            candidates_term = R#raft.current_term,
+            candidate_id = R#raft.voted_for,
+            last_log_idx = get_previous_log_idx(),
+            last_log_term = get_previous_log_term()
+            },
+    broadcast(Unresponsive_peers, RV).
+
+% TODO
+get_previous_log_term() -> 0.
+
+% TODO
+get_previous_log_idx() -> 0.
+
+
 -spec init_raft_state(raft_config()) -> raft_state().
 init_raft_state(Config) ->
     Peers = Config#raft_config.peers,
     #raft{
         config = Config,
+        votes_received = [],
+        votes_rejected = [],
         next_idx = [{P, 0} || P <- Peers],
         match_idx = [{P, 0} || P <- Peers],
         election_timeout = get_election_timeout(Config)
@@ -291,7 +316,36 @@ get_election_timeout(#raft_config{election_timeout_min=EMin,
 
 -spec get_peers(raft_state()) -> list(raft_peer_id()).
 get_peers(#raft{config=#raft_config{peers=Peers}}) ->
-    Peers.
+    [P || P <- Peers, P =/= node()].
+
+
+% Timers
+-spec start_heartbeat_timer(raft_state()) -> gen_statem:timeout_action().
+start_heartbeat_timer(#raft{config=#raft_config{heart_beat_interval=H}}) ->
+    {{timeout, heartbeat_timeout}, H, heartbeat_timeout}.
+
+-spec reset_heartbeat_timer(raft_state()) -> gen_statem:timeout_action().
+reset_heartbeat_timer(R) ->
+    % gen_statem resets the timer if you start it again
+    start_heartbeat_timer(R).
+
+-spec stop_heartbeat_timer(raft_state()) -> gen_statem:timeout_action().
+stop_heartbeat_timer(#raft{}) ->
+    {{timeout, heartbeat_timeout}, infinity, heartbeat_timeout}.
+
+-spec start_election_timer(raft_state()) -> gen_statem:timeout_action().
+start_election_timer(#raft{election_timeout=ET}) ->
+    {{timeout, election_timeout}, ET, election_timeout}.
+
+-spec reset_election_timer(raft_state()) -> gen_statem:timeout_action().
+reset_election_timer(R) ->
+    % gen_statem resets the timer if you start it again
+    start_election_timer(R).
+
+-spec stop_election_timer(raft_state()) -> gen_statem:timeout_action().
+stop_election_timer(#raft{}) ->
+    {{timeout, election_timeout}, infinity, election_timeout}.
+
 
 
 %% =========================================================================
