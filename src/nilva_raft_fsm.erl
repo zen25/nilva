@@ -124,12 +124,7 @@ follower(enter, candidate, Data) ->
         [stop_heartbeat_timer(Data), reset_election_timer(Data)]};
 % Election timeout
 follower({timeout, election_timeout}, election_timeout, Data) ->
-
-    _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
-                         [node(), election, Data#raft.current_term + 1]),
-    NewData = start_election(Data),
-    {next_state, candidate, NewData,
-        [start_heartbeat_timer(NewData)]};
+    {next_state, candidate, Data};
 % Append Entries request (valid)
 follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
     when FT =< LT ->
@@ -173,10 +168,12 @@ follower(EventType, EventContent, Data) ->
 %
 % State Change (follower -> candidate)
 candidate(enter, follower, Data) ->
-    _Ignore = lager:info("Starting election"),
-
-    {next_state, candidate, Data,
-        [start_heartbeat_timer(Data), reset_election_timer(Data)]};
+    % Start a new election
+    NewData = start_election(Data),
+    _Ignore = lager:info("{node:~p} starting {event:~p} in {term:~p}",
+                         [node(), election, NewData#raft.current_term]),
+    {next_state, candidate, NewData,
+        [start_heartbeat_timer(NewData), start_election_timer(NewData)]};
 % Invalid State Change (leader x-> candidate)
 candidate(enter, leader, _) ->
     Error = "Cannot become a candidate from a leader",
