@@ -113,7 +113,7 @@
 -record(ae, {
         leaders_term            :: raft_term(),
         leader_id               :: raft_peer_id(),
-        prev_log_idx            :: raft_term(),
+        prev_log_idx            :: raft_log_idx(),
         prev_log_term           :: raft_term(),
         entries                 :: list(entry()),
         leaders_commit_idx      :: raft_log_idx()
