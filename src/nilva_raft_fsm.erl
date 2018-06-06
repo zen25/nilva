@@ -104,7 +104,7 @@ terminate(_Reason, _StateName, _LoopData) ->
 %% =========================================================================
 
 
-% Follower state callback
+% Follower State Callback
 %
 % Invalid Config
 follower(_, _, []) ->
@@ -113,6 +113,9 @@ follower(_, _, []) ->
     {stop, {error, Error}};
 follower(enter, follower, Data) ->
     Peers = get_peers(Data),
+    % TODO: Handle this properly, we can keep the cookie in the config file
+    %       Instead of setting cookie for all nodes, ping them
+    %       If the cookie is the same, the cluster should be connected
     Cookie = 'abcdefgh',
     lists:foreach(fun(Node) -> erlang:set_cookie(Node, Cookie) end, Peers),
     {keep_state_and_data, []};
@@ -150,7 +153,7 @@ follower(cast, AE = #ae{leaders_term=LT}, Data = #raft{current_term=FT})
         {keep_state_and_data, []};
 % Request Votes (invalid)
 follower(cast, RV, Data=#raft{voted_for=VotedFor})
-    when VotedFor =/= node(), VotedFor =/= undefined ->
+    when VotedFor =/= undefined ->
         % Deny Vote
         _Ignore = lager:info("{node:~p} {event:~p} {from_node:~p}",
                             [node(), deny_vote_already_voted, RV#rv.candidate_id]),
@@ -190,7 +193,8 @@ follower(EventType, EventContent, Data) ->
 
 
 
-% Candidate state callback
+
+% Candidate State Callback
 %
 % State Change (follower -> candidate)
 candidate(enter, follower, Data) ->
@@ -254,6 +258,9 @@ candidate(EventType, EventContent, Data) ->
     handle_event(EventType, EventContent, Data).
 
 
+
+% Leader State Callback
+%
 % State Change (candidate -> leader)
 leader(enter, candidate, Data) ->
     % Send out a no op to establish your authority,

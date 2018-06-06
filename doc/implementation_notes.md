@@ -54,6 +54,13 @@ easier to test the test infrastructure code.
 #### Other
 In addition to that, we can have a peer forcefully start a new election.
 
+It was necessary to implement the heartbeats for leader and broadcasting the append entries
+to followers to maintain its authority. Without this, every node timed out and the number of
+elections that were held quickly got out of hand. It was not possible to even easily
+verify that there was at most one leader in the term. This was exacerbated by the fact
+that all the nodes write to the same log file as I had not setup separate log files for
+each node in lager's config during initial implementation.
+
 ### Methods:
 
 Trace messages from the logs can be used to write tests. You can process the logs from each peer,
