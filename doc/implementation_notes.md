@@ -13,10 +13,11 @@ applied that log entry.
 
 Raft logs act as WAL for the RSM. Logs are used to store multiple types of
 entries:
-    - durable raft server state
-    - client RSM commands
-    - snapshot information
-    - response to client RSM commands
+
+- durable raft server state
+- client RSM commands
+- snapshot information
+- response to client RSM commands
 
 Each of these are stored as a json entry in the log file. The json was simply
 chosen as it is human readable. Any other format would work.
@@ -43,9 +44,10 @@ A process that is dropping messages is indistinguishable from a failed process
 in a distributed system. Let's use this to our advantage.
 
 To simulate a peer failure, we can:
-    - drop next N messages
-    - drop x% of arriving messages randomly based on uniform distribution
-    - drop all messages until we decide not to anymore
+
++ drop next N messages
++ drop x% of arriving messages randomly based on uniform distribution
++ drop all messages until we decide not to anymore
 
 Dropping messages comes with a caveat though. How should we handle messages from
 the log server and self()? We know that log server and raft fsm are under a
