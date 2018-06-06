@@ -14,10 +14,10 @@ applied that log entry.
 Raft logs act as WAL for the RSM. Logs are used to store multiple types of
 entries:
 
-- durable raft server state
-- client RSM commands
-- snapshot information
-- response to client RSM commands
+    * durable raft server state
+    * client RSM commands
+    * snapshot information
+    * response to client RSM commands
 
 Each of these are stored as a json entry in the log file. The json was simply
 chosen as it is human readable. Any other format would work.
@@ -114,11 +114,12 @@ always are PITA in any language in my experience.
 ##### Rebar3
 
 Rebar3 comes with lots of features. Some things I was not aware of:
-    - "rebar3 shell" launches an interactive shell from which you can compile,
-      run tests & run dialyzer
-    - running dialyzer compiles the code. No need to do the compile step as a
-      separate step
-    - you can launch an app by " > rebar3 shell --apps nilva"
+
++ "rebar3 shell" launches an interactive shell from which you can compile,
+  run tests & run dialyzer
++ running dialyzer compiles the code. No need to do the compile step as a
+  separate step
++ you can launch an app by " > rebar3 shell --apps nilva"
 
 See: (https://ferd.ca/rebar3-shell.html)
 
