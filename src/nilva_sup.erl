@@ -9,7 +9,7 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init(_Args) ->
-    SupFlags = {one_for_all, 5, 10},
+    SupFlags = {one_for_all, 0, 10},
     Children = [child(nilva_raft_fsm), child(nilva_log_server)],
     {ok, {SupFlags, Children}}.
 
