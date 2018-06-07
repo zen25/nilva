@@ -49,14 +49,24 @@ To simulate a peer failure, we can:
 + drop x% of arriving messages randomly based on uniform distribution
 + drop all messages until we decide not to anymore
 
-Dropping messages comes with a caveat though. How should we handle messages from
-the log server and self()? We know that log server and raft fsm are under a
-supervisor with one for all strategy. Need to figure out what to do in this
-case.
+##### Test Proxy (nilva_test_proxy)
 
-It might be a good idea to route the messages to & fro from nilva_raft_fsm
-through a proxy. This would separate any test infrastructure code from the raft
-code itself. This also makes it easier to test the test infrastructure code.
+To accomplish the above, I decided to route the messages to & fro `nilva_raft_fsm` through a proxy. This separates the test infrastructure code from the raft code. This also makes it easier to test the test infrastructure code.
+
+Note that while the proxy can simulate node failure from peer's perspective, it
+cannot do that from node's perspective. You still need to find a way to test
+Raft log's durability and things like restoring from snapshot etc., that occur
+when a node recovers using some other method.
+
+**Caveat**
+Proxy server acts as a combined buffer for both incoming & outgoing messages.
+This is going to impact benchmarking & performance data but should not impact
+the correctness of the implementation. So do not use test configuration for
+performance testing.
+
+**NOTE**
+It is recommended that you start a different node with the same cookie to send
+test commands via proxy.
 
 #### Other
 
@@ -119,7 +129,10 @@ Rebar3 comes with lots of features. Some things I was not aware of:
   run tests & run dialyzer
 + running dialyzer compiles the code. No need to do the compile step as a
   separate step
-+ you can launch an app by " > rebar3 shell --apps nilva"
++ you can launch an app by:
+    > rebar3 shell --apps nilva
++ you can run in test configuration by running:
+    > rebar3 as test shell --apps nilva
 
 See: (https://ferd.ca/rebar3-shell.html)
 
