@@ -1,6 +1,7 @@
 -module(nilva).
 
 % For testing & debugging
+-export([set_test_proxy_all/2]).
 -export([echo_log/1, echo_fsm/1, echo_fsm_all/2, echo_log_all/2]).
 -export([get_state/0, get_state/1]).
 
@@ -17,6 +18,10 @@ echo_fsm_all(Msg, Nodes) ->
 
 echo_log_all(Msg, Nodes) ->
     [nilva_log_server:echo(Msg, N) || N <- Nodes].
+
+-spec set_test_proxy_all(any(), list()) -> list().
+set_test_proxy_all(Msg, Nodes) ->
+    [nilva_test_proxy:set(Msg, N) || N <- Nodes].
 
 % Returns the Raft FSM state of the current node
 get_state() ->
