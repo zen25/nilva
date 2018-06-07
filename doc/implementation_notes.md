@@ -64,6 +64,10 @@ This is going to impact benchmarking & performance data but should not impact
 the correctness of the implementation. So do not use test configuration for
 performance testing.
 
+**NOTE**
+It is recommended that you start a different node with the same cookie to send
+test commands via proxy.
+
 #### Other
 
 In addition to that, we can have a peer forcefully start a new
