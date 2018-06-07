@@ -58,6 +58,15 @@ It might be a good idea to route the messages to & fro from nilva_raft_fsm
 through a proxy. This would separate any test infrastructure code from the raft
 code itself. This also makes it easier to test the test infrastructure code.
 
+Note that while proxy can simulate node failure from peer's perspective, it
+cannot do that from node's perspective. You still need to find a way to test
+Raft log's durability and things like restoring from snapshot etc., that occur
+when a node recovers in some other way.
+
+Proxy server acts as a combined buffer for both incoming & outgoing messages.
+This is going to impact benchmarking & performance data but should not impact
+the correctness of the implementation
+
 #### Other
 
 In addition to that, we can have a peer forcefully start a new
@@ -120,6 +129,8 @@ Rebar3 comes with lots of features. Some things I was not aware of:
 + running dialyzer compiles the code. No need to do the compile step as a
   separate step
 + you can launch an app by " > rebar3 shell --apps nilva"
++ you can run in test configuration by running:
+    > rebar3 as test shell --apps nilva
 
 See: (https://ferd.ca/rebar3-shell.html)
 

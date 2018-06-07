@@ -311,8 +311,14 @@ broadcast(Peers, Msg) ->
 
 
 -spec cast(node(), any()) -> no_return().
+-ifdef(TEST).
+% Route through proxy when testing
+cast(Node, Msg) ->
+    gen_server:cast(nilva_test_proxy, {send_to, Node, Msg}).
+-else.
 cast(Node, Msg) ->
     gen_statem:cast({?MODULE, Node}, Msg).
+-endif.
 
 
 % Election related
