@@ -20,7 +20,7 @@ KV Store implementation based on Raft.
     + [ ] Log Compaction
     + [ ] Pipelining
     + [ ] Serving (Stale) Reads from Followers
-+ [x] Test Infrastructure
++ [ ] Test Infrastructure
     + [ ] Test Proxy
         + [x] Drop N messages
         + [x] Drop x% of messages randomly (uniform distribution)
