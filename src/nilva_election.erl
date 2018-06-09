@@ -9,7 +9,7 @@
 
 -export([get_election_timeout/1]).
 -export([start_election/1, resend_request_votes/2, count_votes/2]).
--export([cast_vote/2, deny_vote/2]).
+-export([is_viable_leader/2, cast_vote/2, deny_vote/2]).
 -export([send_heart_beats/1]).
 
 
@@ -29,6 +29,8 @@ count_votes(#rrv{peer_id=PeerId, vote_granted=VoteGranted},
             Data=#raft{votes_received=VTrue, votes_rejected=VFalse}) ->
     % Assumption: We always have odd number of peers in config
     VotesNeeded = (length(Data#raft.config#raft_config.peers) div 2) + 1,
+    _Ignore = lager:info("NumVotesNeeded:~p, VotesReceived:~p, VotesRejected:~p",
+                          [VotesNeeded, VTrue, VFalse]),
     case VoteGranted of
         true ->
             case lists:member(PeerId, VTrue) of
@@ -36,7 +38,8 @@ count_votes(#rrv{peer_id=PeerId, vote_granted=VoteGranted},
                     % Already processed, ignore
                     {false, Data};
                 false ->
-                    VotesReceived = length(Data#raft.votes_received) + 1,
+                    % NOTE: One vote from self & one vote from new peer
+                    VotesReceived = length(Data#raft.votes_received) + 1 + 1,
                     if
                         VotesReceived >= VotesNeeded ->
                             {true, Data#raft{votes_received = VTrue ++ [PeerId]}};
@@ -64,6 +67,8 @@ start_election(R = #raft{current_term=T}) ->
     NewR = R#raft{
                 current_term = T + 1,
                 voted_for = node(),
+                votes_received = [],
+                votes_rejected = [],
                 % Calculate new election timeout for next term
                 election_timeout = get_election_timeout(R#raft.config)
                 },
@@ -90,11 +95,31 @@ resend_request_votes(R = #raft{votes_received=PTrue, votes_rejected=PFalse}, All
     {RV, Unresponsive_peers}.
 
 
+-spec is_viable_leader(raft_state(), request_votes()) -> {boolean(), atom()}.
+is_viable_leader(Data = #raft{current_term=CurrentTerm}, RV = #rv{candidates_term=Term}) ->
+    if
+        Term < CurrentTerm -> {false, deny_vote_stale_term};
+        Term > CurrentTerm ->
+            case is_log_up_to_date(RV) of
+                true -> {true, cast_vote};
+                false -> {false, deny_vote_log_not_up_to_date}
+            end;
+        Term =:= CurrentTerm ->
+            % NOTE: We can only vote for future term except for
+            %       when we receive a retry request votes from a
+            %       candidate in current term that we already voted for
+            % Grant vote if we had already done so
+            case Data#raft.voted_for =:= RV#rv.candidate_id of
+                true -> {true, cast_vote_idempotent_request};
+                false -> {true, deny_vote_already_voted}
+            end
+    end.
+
+
 -spec cast_vote(raft_state(), request_votes()) ->
     {reply_request_votes(), raft_peer_id(), raft_state()}.
 cast_vote(Data, #rv{candidate_id=From, candidates_term=Term}) ->
     % Update to candidate's term
-    % TODO: Persist
     NewData = Data#raft{voted_for=From, current_term=Term},
     RRV = #rrv{
                peers_current_term = Term,
@@ -106,9 +131,9 @@ cast_vote(Data, #rv{candidate_id=From, candidates_term=Term}) ->
 
 -spec deny_vote(raft_state(), request_votes()) ->
     {reply_request_votes(), raft_peer_id()}.
-deny_vote(#raft{current_term=CT}, #rv{candidate_id=From}) ->
+deny_vote(#raft{current_term=CurrentTerm}, #rv{candidate_id=From}) ->
     RRV = #rrv{
-               peers_current_term = CT,
+               peers_current_term = CurrentTerm,
                peer_id = node(),
                vote_granted = false
               },
@@ -127,6 +152,18 @@ send_heart_beats(#raft{current_term=Term}) ->
              leaders_commit_idx = get_commit_idx()
              },
     AE.
+
+
+-spec is_log_up_to_date(request_votes()) -> boolean().
+is_log_up_to_date(#rv{candidate_id=CandidateId})
+    when CandidateId =:= true  ->
+        true;
+% TODO: Get rid of the clause below. It is only here to pass dialyzer warning
+%       for now
+is_log_up_to_date(#rv{candidate_id='suppree@dialyzer.error'}) ->
+    false;
+is_log_up_to_date(_RV) ->
+    true.
 
 % TODO
 get_previous_log_term() -> 0.

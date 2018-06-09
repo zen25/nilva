@@ -164,26 +164,24 @@ follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
         {RRV, Candidate} = nilva_election:deny_vote(Data, RV),
         cast(Candidate, RRV),
         {keep_state_and_data, []};
-% Request Votes (invalid, already voted for this term)
-% TODO: Logically, it should not be possible for VotedFor =:= undefined & FT =:= CT
-%       But handle this case anyway
-follower(cast, RV = #rv{candidates_term=CT}, Data=#raft{current_term=FT, voted_for=VotedFor})
-    when VotedFor =/= undefined, FT =:= CT ->
-        % Deny Vote
-        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                            [node(), FT, follower, received_valid_rv, deny_vote_already_voted]),
-        {RRV, Candidate} = nilva_election:deny_vote(Data, RV),
-        cast(Candidate, RRV),
-        {keep_state_and_data, []};
-% Request Votes request (valid)
-follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
-    when FT < CT ->
-        % Grant the vote if already not given but do not reset election timer
-        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                            [node(), FT, follower, received_valid_rv, cast_vote]),
-        {RRV, Candidate, NewData} = nilva_election:cast_vote(Data, RV),
-        cast(Candidate, RRV),
-        {keep_state, NewData, [stop_election_timer(NewData)]};
+% Request Votes (valid)
+follower(cast, RV = #rv{candidates_term=CT}, Data=#raft{current_term=FT})
+    when FT =< CT ->
+        {CanGrantVote, Reason} = nilva_election:is_viable_leader(Data, RV),
+        case CanGrantVote of
+            true ->
+                {RRV, Candidate, NewData} = nilva_election:cast_vote(Data, RV),
+                cast(Candidate, RRV),
+                _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                                    [node(), FT, follower, received_valid_rv, Reason]),
+                {keep_state, NewData, [reset_election_timer(NewData)]};
+            false ->
+                {RRV, Candidate} = nilva_election:deny_vote(Data, RV),
+                cast(Candidate, RRV),
+                _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                                    [node(), FT, follower, received_valid_rv, Reason]),
+                {keep_state_and_data, [reset_election_timer(Data)]}
+        end;
 % Stale Messages
 % Heartbeats are not valid in follower state. Follower is passive
 follower({timeout, heartbeat_timeout}, heartbeat_timeout, #raft{current_term=FT}) ->
