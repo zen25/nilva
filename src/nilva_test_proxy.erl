@@ -5,6 +5,8 @@
 % Note that the proxy acts as a combined buffer for both incoming & outgoing messages.
 % Hence, do NOT use the proxy when benchmarking or performance testing
 %
+% Note that all the nodes must be either in test configuration or in normal configuration
+% for the clutser to work properly.
 -module(nilva_test_proxy).
 -behaviour(gen_server).
 

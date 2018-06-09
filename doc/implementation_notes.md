@@ -62,14 +62,23 @@ Raft log's durability and things like restoring from snapshot etc., that occur
 when a node recovers using some other method.
 
 **Caveat**
+
 Proxy server acts as a combined buffer for both incoming & outgoing messages.
 This is going to impact benchmarking & performance data but should not impact
 the correctness of the implementation. So do not use test configuration for
 performance testing.
 
-**NOTE**
+**NOTE:**
+
 It is recommended that you start a different node with the same cookie to send
 test commands via proxy.
+
+**NOTE**
+
+It is not possible to run few nodes under test configuration and few nodes
+under normal configuration due to how the proxy is implemented. This is due to
+changes required for the cast function to make the proxy work. Good news is that
+I found a bug in leader election due to this not working as I had expected.
 
 #### Other
 
