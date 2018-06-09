@@ -25,10 +25,10 @@ chosen as it is human readable. Any other format would work.
 Each log entry stored on a disk should also include a checksum to guard against
 corruption.
 
-Snapshotting is not needed if the RSM is itself durable. For example, if the RSM
-is sqlite, once the SQL command is applied, it is durable. We may need to keep
-the responses still in the log though to properly handle client requests in case
-of idempotent client requests.
+Snapshotting is not needed if the RSM is itself durable. For example, if the
+RSM is sqlite, once the SQL command is applied, it is durable. We may need to
+keep the responses still in the log though to properly handle client requests
+in case of idempotent client requests.
 
 ---
 
@@ -51,7 +51,10 @@ To simulate a peer failure, we can:
 
 ##### Test Proxy (nilva_test_proxy)
 
-To accomplish the above, I decided to route the messages to & fro `nilva_raft_fsm` through a proxy. This separates the test infrastructure code from the raft code. This also makes it easier to test the test infrastructure code.
+To accomplish the above, I decided to route the messages to & fro `
+nilva_raft_fsm` through a proxy. This separates the test infrastructure code
+from the raft code. This also makes it easier to test the test infrastructure
+code.
 
 Note that while the proxy can simulate node failure from peer's perspective, it
 cannot do that from node's perspective. You still need to find a way to test
@@ -70,8 +73,18 @@ test commands via proxy.
 
 #### Other
 
-In addition to that, we can have a peer forcefully start a new
-election.
+In addition to that, we can use the proxy to:
+
++ force the node to become candidate
++ reorder messages randomly
+
+Separating I/O from the pure code makes it easier to write unit tests. Moved
+the `broadcast/2` & `cast/2` to the gen_statem state function callbacks. The
+functions like `send_heart_beats` etc., are still not pure though. They still
+make synchronous calls to the nilva_log_server to get some info. This was left
+alone as I wanted to test the messages being sent out by these functions, not
+the input. If necessary, they can be extracted to the top level too and passed
+in as inputs.
 
 During the initial implementation of leader election, it was necessary to
 implement the send heartbeats for leader and broadcasting the append entries to
@@ -86,23 +99,24 @@ implementation.
 
 Trace messages from the logs can be used to write tests. You can process the
 logs from each peer, extract the relevant data and run the tests on that data.
-These tests can ensure that we do not violate some properties like single leader
-etc., but are not sufficient by themselves. Tracing assumes that a peer's log
-records everything necessary and there are no missed events.
+These tests can ensure that we do not violate some properties like single
+leader etc., but are not sufficient by themselves. Tracing assumes that a
+peer's log records everything necessary and there are no missed events.
 
 Linearizability needs to be tested w.r.t the clients. See if it is easy to use
 jepsen for this. The whole point of REST api for clients was to make this
 easier.
 
-Aside, I should probably use a known language for processing logs like Python. I
-am not familiar with Erlang's string processing capabilities and they almost
+Aside, I should probably use a known language for processing logs like Python.
+I am not familiar with Erlang's string processing capabilities and they almost
 always are PITA in any language in my experience.
 
 #### TODO: How to test the following?
 
-- How do you test the supervisor and restarts? How do you test the process
-- skeleton at each node? How do you test the communication between nodes? How do
-- you test the configuration changes?
+- How do you test the supervisor and restarts?
+- How do you test the process skeleton at each node?
+- How do you test the communication between nodes?
+- How do you test the configuration changes?
 
 ### What to test?
 
@@ -144,11 +158,11 @@ store node ids to fully qualify the process.
 
 ##### Tidbits
 
-`random:uniform()` gives the same sequence of random numbers irrespective of the
-process. Use `rand:uniform()` instead if you do not want to set the seed. While
-rand's documentation do not recommend it for cryptographic applications, this
-should not matter much in this project as we are primarily using it to calculate
-election timeouts.
+`random:uniform()` gives the same sequence of random numbers irrespective of
+the process. Use `rand:uniform()` instead if you do not want to set the seed.
+While rand's documentation do not recommend it for cryptographic applications,
+this should not matter much in this project as we are primarily using it to
+calculate election timeouts.
 
 In Erlang's `gen_statem`, if the `next_state` is the same as the current state,
 it is not considered a state change. Hence, the timers are not reset here. We
@@ -187,3 +201,4 @@ References:
 4. (https://www.erlang-in-anger.com/)
 5. (https://asatarin.github.io/testing-distributed-systems/)
 6. (https://www.youtube.com/watch?v=f_jl6MR3kXQ)
+7. (https://github.com/zkessin/testing-erlang-book)
