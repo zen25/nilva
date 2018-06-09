@@ -84,7 +84,7 @@ init(_Args) ->
             Data = init_raft_state(Config),
             _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                                  [node(), -1, init, successfully_read_config, start]),
-            _Ignore2 = lager:debug("election_timeout:~p", [Data#raft.election_timeout]),
+            _Ignore2 = lager:info("election_timeout:~p", [Data#raft.election_timeout]),
             ElectionTimeOutAction = {{timeout, election_timeout},
                                     Data#raft.election_timeout, election_timeout },
             {ok, follower, Data, [ElectionTimeOutAction]}
@@ -123,7 +123,7 @@ follower(enter, candidate, Data) ->
     % TODO: Figure out the runtime error when setting record value to undefined
     % NewData = Data#raft{voted_for=undefined},
     NewData = Data#raft{voted_for = undefined, votes_received = [], votes_rejected = []},
-    _Ignore = lager:debug("Successfully reset voted_for"),
+    _Ignore = lager:info("Successfully reset voted_for"),
     {keep_state, NewData,
         [stop_heartbeat_timer(NewData), start_election_timer(NewData)]};
 % State change (leader -> follower)
@@ -144,7 +144,7 @@ follower(cast, #ae{leaders_term=LT}, Data = #raft{current_term=FT})
         NewData = Data#raft{current_term = LT},
         _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                             [node(), FT, follower, received_valid_ae, process_ae]),
-        _Ignore2 = lager:debug("Upgrading from term:~p to term:~p",
+        _Ignore2 = lager:info("Upgrading from term:~p to term:~p",
                                [FT, LT]),
         {keep_state, NewData, [reset_election_timer(NewData)]};
 % Append Entries request (invalid)
