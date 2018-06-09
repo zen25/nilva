@@ -21,8 +21,6 @@ get_election_timeout(#raft_config{election_timeout_min=EMin,
 
 
 % Election related
-% TODO: We ignored the term for which the vote was granted. This is the most likely cause
-%       of the bug
 -spec count_votes(reply_request_votes(), raft_state()) ->
     {boolean(), raft_state()}.
 count_votes(#rrv{peer_id=PeerId, vote_granted=VoteGranted},
@@ -105,7 +103,7 @@ is_viable_leader(Data = #raft{current_term=CurrentTerm}, RV = #rv{candidates_ter
                 false -> {false, deny_vote_log_not_up_to_date}
             end;
         Term =:= CurrentTerm ->
-            % NOTE: We can only vote for future term except for
+            % NOTE: We can only vote for the future terms except for
             %       when we receive a retry request votes from a
             %       candidate in current term that we already voted for
             % Grant vote if we had already done so
