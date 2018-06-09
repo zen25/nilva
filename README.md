@@ -4,28 +4,28 @@ Nilva
 KV Store implementation based on Raft.
 
 **TODO**:
- + [ ] Raft Consensus algorithm
-    + [X] Leader Election
++ [ ] Raft Consensus algorithm
+    + [x] Leader Election
     + [ ] Log Replication
     + [ ] Snapshotting
     + [ ] Membership changes
     + [ ] RSM
     + [ ] Client Interaction
- + [ ] Other parts of KV store
++ [ ] Other parts of KV store
     + [ ] Rest API for clients (Put, Get, Delete only)
     + [ ] Durable Raft Logs
     + [ ] Linearizability from client perspective
     + [ ] sharding of keys
- + [ ] Optimizations
++ [ ] Optimizations
     + [ ] Log Compaction
     + [ ] Pipelining
     + [ ] Serving (Stale) Reads from Followers
- + [X] Test Infrastructure
-     + [ ] Test Proxy
-        + [X] Drop N messages
-        + [X] Drop x% of messages randomly (uniform distribution)
-        + [X] Delay messages by time T
-        + [X] Delay messages by ~Uniform(MinT, MaxT)
++ [x] Test Infrastructure
+    + [ ] Test Proxy
+        + [x] Drop N messages
+        + [x] Drop x% of messages randomly (uniform distribution)
+        + [x] Delay messages by time T
+        + [x] Delay messages by ~Uniform(MinT, MaxT)
         + [ ] Force new election
         + [ ] Reorder messages
         + [ ] Better message delay models
