@@ -137,6 +137,7 @@ always are PITA in any language in my experience.
 5. There can be at most 1 Leader per term. Multiple candidates are possible
 6. There can be at most N candidates during election where N is number of nodes
    in the cluster. This can happen when each node is isolated from the rest.
+7. A server can vote only once per term.
 
 ---
 

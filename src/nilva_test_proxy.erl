@@ -69,17 +69,17 @@ handle_cast({send_to, Node, Msg}, LoopData) ->
     {NewLoopData, ProxyAction} = filter_message(LoopData),
     case ProxyAction of
         pass->
-            _Ignore = lager:info("Proxy routing message from ~p to ~p",
+            _Ignore = lager:debug("Proxy routing message from ~p to ~p",
                                  [node(), Node]),
             % Send the message to proxy
             gen_server:cast({?MODULE, Node}, Msg),
             {noreply, NewLoopData};
         drop ->
-            _Ignore = lager:info("Proxy dropping message from ~p to ~p",
+            _Ignore = lager:debug("Proxy dropping message from ~p to ~p",
                                  [node(), Node]),
             {noreply, NewLoopData};
         {delay, T} ->
-            _Ignore = lager:info("Proxy delaying message from ~p to ~p by ~p",
+            _Ignore = lager:debug("Proxy delaying message from ~p to ~p by ~p",
                                  [node(), Node, T]),
             timer:sleep(T),
             % Send the message to proxy
@@ -91,17 +91,17 @@ handle_cast(Msg, LoopData) ->
     {NewLoopData, ProxyAction} = filter_message(LoopData),
     case ProxyAction of
         pass ->
-            _Ignore = lager:info("Proxy routing message to ~p",
+            _Ignore = lager:debug("Proxy routing message to ~p",
                                  [node()]),
             % Note that `From` is embedded in the 4 raft message types
             gen_statem:cast(nilva_raft_fsm, Msg),
             {noreply, NewLoopData};
         drop ->
-            _Ignore = lager:info("Proxy dropping message to ~p",
+            _Ignore = lager:debug("Proxy dropping message to ~p",
                                  [node()]),
             {noreply, NewLoopData};
         {delay, T} ->
-            _Ignore = lager:info("Proxy delaying message to ~p by ~p",
+            _Ignore = lager:debug("Proxy delaying message to ~p by ~p",
                                  [node(), T]),
             timer:sleep(T),
             gen_statem:cast(nilva_raft_fsm, Msg),
@@ -115,7 +115,7 @@ filter_message({drop, n_consecutive, N}) when N > 1, is_integer(N) ->
     {{drop, n_consecutive, N - 1}, drop};
 filter_message({drop, n_consecutive, N}) when N =:= 1, is_integer(N) ->
     {pass_all, drop};
-filter_message({drop, uniform, X}) when X > 0, X =< 100 ->
+filter_message({drop, uniform, X}) when X >= 0, X =< 100 ->
     U = nilva_helper:getUniformRand(0, 100),
     case U < X of
         true -> {{drop, uniform, X}, drop};

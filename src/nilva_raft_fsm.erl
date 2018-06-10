@@ -108,24 +108,9 @@ terminate(_Reason, _StateName, _LoopData) ->
 
 % Follower State Callback
 %
-% TODO: Move this to a join function
-follower(enter, follower, Data) ->
-    Peers = get_peers(Data),
-    % TODO: Handle this properly, we can keep the cookie in the config file
-    %       Instead of setting cookie for all nodes, ping them
-    %       If the cookie is the same, the cluster should be connected
-    Cookie = 'abcdefgh',
-    lists:foreach(fun(Node) -> erlang:set_cookie(Node, Cookie) end, Peers),
-    {keep_state_and_data, []};
 % State change (candidate -> follower)
 follower(enter, candidate, Data) ->
-    % Reset the election timer and process the post-poned event
-    % TODO: Figure out the runtime error when setting record value to undefined
-    % NewData = Data#raft{voted_for=undefined},
-    NewData = Data#raft{voted_for = undefined, votes_received = [], votes_rejected = []},
-    _Ignore = lager:info("Successfully reset voted_for"),
-    {keep_state, NewData,
-        [stop_heartbeat_timer(NewData), start_election_timer(NewData)]};
+    {keep_state_and_data, [stop_heartbeat_timer(Data), reset_election_timer(Data)]};
 % State change (leader -> follower)
 follower(enter, leader, Data) ->
     % Turn off the heart beat timer & start the election timer
@@ -135,24 +120,43 @@ follower(enter, leader, Data) ->
 % Election timeout
 follower({timeout, election_timeout}, election_timeout, Data) ->
     _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                        [node(), -1, follower, election_timeout, nominate_self]),
+                        [node(), Data#raft.current_term, follower,
+                        election_timeout, nominate_self]),
     {next_state, candidate, Data};
-% Append Entries request (valid)
-follower(cast, #ae{leaders_term=LT}, Data = #raft{current_term=FT})
-    when FT =< LT ->
-        % Process the data and reset election timer if it is from legitimate leader
-        NewData = Data#raft{current_term = LT},
+% Append Entries request (valid heartbeat, current term)
+follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_term=FT})
+    when FT =:= LT ->
         _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                            [node(), FT, follower, received_valid_ae, process_ae]),
-        _Ignore2 = lager:info("Upgrading from term:~p to term:~p",
-                               [FT, LT]),
+                            [node(), FT, follower, AE, reset_election_timer]),
+        RAE = #rae{peers_current_term = FT,
+                   peer_id = node(),
+                   success = true
+                   },
+        cast(AE#ae.leader_id, RAE),
+        {keep_state_and_data, [reset_election_timer(Data)]};
+% Append Entries request (valid heartbeat, leader with higher term)
+follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_term=FT})
+    when FT < LT ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), FT, follower, AE, update_term_and_reset_election_timer]),
+        NewData = update_term(Data, LT),
+        RAE = #rae{peers_current_term = NewData#raft.current_term,
+                   peer_id = node(),
+                   success = true
+                   },
+        cast(AE#ae.leader_id, RAE),
         {keep_state, NewData, [reset_election_timer(NewData)]};
 % Append Entries request (invalid)
-follower(cast, #ae{leaders_term=LT}, #raft{current_term=FT})
+follower(cast, AE=#ae{leaders_term=LT}, #raft{current_term=FT})
     when FT > LT ->
         % Stale leader, reject the append entries
         _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                            [node(), FT, follower, received_invalid_ae, reject_ae]),
+                            [node(), FT, follower, AE, reject_ae]),
+        RAE = #rae{peers_current_term = FT,
+                   peer_id = node(),
+                   success = false
+                   },
+        cast(AE#ae.leader_id, RAE),
         {keep_state_and_data, []};
 % Request Votes request (invalid)
 follower(cast, RV = #rv{candidates_term=CT}, Data = #raft{current_term=FT})
@@ -188,17 +192,11 @@ follower({timeout, heartbeat_timeout}, heartbeat_timeout, #raft{current_term=FT}
     _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), FT, follower, stale_heartbeat_timeout, ignore]),
     {keep_state_and_data, []};
-% Ignoring replies to Append Entries
+% Ignoring replies to Append Entries. Follower is passive
 follower(cast, #rae{}, #raft{current_term=FT}) ->
     _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), FT, follower, stale_rae, ignore]),
     {keep_state_and_data, []};
-% Ignoring replies to Request Votes
-follower(cast, #rrv{}, #raft{current_term=FT}) ->
-    _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                        [node(), FT, follower, stale_rrv, ignore]),
-    {keep_state_and_data, []};
-% TODO: Handle client request -> redirect to known leader if it exists
 % Events not part of Raft
 follower(EventType, EventContent, Data) ->
     % Handle the rest
@@ -245,6 +243,33 @@ candidate({timeout, heartbeat_timeout}, heartbeat_timeout, Data) ->
     %                     heartbeat_timeout, resend_rv]),
     broadcast(Unresponsive_peers, RV),
     {keep_state_and_data, [start_heartbeat_timer(Data)]};
+% Append Entries request (valid, there is already a leader for this term)
+candidate(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
+    when CT =:= LT ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), CT, candidate, AE, step_down]),
+        ProcessEventAsFollower = {next_event, cast, AE},
+        {next_state, follower, Data, [ProcessEventAsFollower]};
+% Append Entries request (valid, leader with higher term)
+candidate(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
+    when CT < LT ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), CT, candidate, AE, update_term_and_step_down]),
+        NewData = update_term(Data, LT),
+        ProcessEventAsFollower = {next_event, cast, AE},
+        {next_state, follower, NewData, [ProcessEventAsFollower]};
+% Append Entries request (invalid)
+candidate(cast, AE=#ae{leaders_term=LT}, #raft{current_term=CT})
+    when CT > LT ->
+        % Stale leader, reject the append entries
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), CT, candidate, AE, reject_ae]),
+        RAE = #rae{peers_current_term = CT,
+                   peer_id = node(),
+                   success = false
+                   },
+        cast(AE#ae.leader_id, RAE),
+        {keep_state_and_data, []};
 % Request Votes request (invalid)
 candidate(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
     when MyTerm >= CT ->
@@ -255,8 +280,7 @@ candidate(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
         {RRV, Peer} = nilva_election:deny_vote(Data, RV),
         cast(Peer, RRV),
         {keep_state_and_data, []};
-% Request Voes request (valid)
-% TODO: SHould the request votes be synchronous?
+% Request Votes request (valid)
 candidate(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
     when MyTerm < CT ->
         % There is a candidate with higher term
@@ -264,6 +288,7 @@ candidate(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
         _Ignore =lager:info("{node:~p} {event:~p}", [node(), stepping_down_as_candidate]),
         ProcessEventAsFollower = {next_event, cast, RV},
         {next_state, follower, Data, [ProcessEventAsFollower]};
+% Reply to Request Votes (valid)
 candidate(cast, RRV=#rrv{peers_current_term = PTerm}, Data = #raft{current_term = Term})
     when PTerm =:= Term ->
         % Collect the votes and see if you can become the leader
@@ -273,23 +298,39 @@ candidate(cast, RRV=#rrv{peers_current_term = PTerm}, Data = #raft{current_term 
                             RRV, count_votes]),
         case WonElection of
             true ->
-                _Ignore =lager:info("{node:~p} {event:~p} {term:~p}",
-                                    [node(), elected_leader, Term]),
+                _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                                    [node(), Term, candidate, RRV, stepup_as_leader]),
                 {next_state, leader, NewData};
             false ->
-                _Ignore =lager:info("{node:~p} {event:~p} {term:~p}",
-                                    [node(), no_majority, Term]),
+                _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                                    [node(), Term, candidate, RRV,
+                                    no_majority_continue_waiting]),
                 {keep_state, NewData}
         end;
-candidate(cast, #rrv{peers_current_term = PTerm}, #raft{current_term = Term})
-    when PTerm =< Term ->
+% Stale msg
+candidate(cast, RRV= #rrv{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm < Term ->
         _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                             [node(), Term, candidate,
-                            received_stale_rrv, ignore]),
+                            RRV, ignore]),
         {keep_state_and_data, []};
+% Impossible message
 candidate(cast, #rrv{peers_current_term = PTerm}, #raft{current_term = Term})
     when PTerm > Term ->
         Error = "Received a RRV from a future term. This should not even be possible",
+        _Ignore = lager:error(Error),
+        {stop, {error, Error}};
+% Stale msg
+candidate(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm < Term ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), Term, candidate,
+                            RAE, ignore]),
+        {keep_state_and_data, []};
+% Impossible message
+candidate(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm >= Term ->
+        Error = "Received a RAE from a future term. This should not even be possible",
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
 candidate(EventType, EventContent, Data) ->
@@ -325,9 +366,86 @@ leader({timeout, heartbeat_timeout}, heartbeat_timeout, Data) ->
     AE = nilva_election:send_heart_beats(Data),
     broadcast(get_peers(Data), AE),
     {keep_state_and_data, [reset_heartbeat_timer(Data)]};
+% Append Entries (Impossible, there should only be one leader per term)
+leader(cast, #ae{leaders_term=LT}, #raft{current_term=CT})
+    when CT =:= LT ->
+        Error = "Received a AE from current term as leader. This should not even be possible",
+        _Ignore = lager:error(Error),
+        {stop, {error, Error}};
+% Append Entries request (valid, leader with higher term)
+leader(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
+    when CT < LT ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), CT, leader, AE, update_term_and_step_down]),
+        NewData = update_term(Data, LT),
+        ProcessEventAsFollower = {next_event, cast, AE},
+        {next_state, follower, NewData, [ProcessEventAsFollower]};
+% Append Entries request (invalid)
+leader(cast, AE=#ae{leaders_term=LT}, #raft{current_term=CT})
+    when CT > LT ->
+        % Stale leader, reject the append entries
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), CT, leader, AE, reject_ae]),
+        RAE = #rae{peers_current_term = CT,
+                   peer_id = node(),
+                   success = false
+                   },
+        cast(AE#ae.leader_id, RAE),
+        {keep_state_and_data, []};
+% Request Votes request (invalid)
+leader(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
+    when MyTerm >= CT ->
+        % Either stale request or from the same term
+        % Deny Vote
+        _Ignore = lager:info("{node:~p} {event:~p} {from_node:~p}",
+                            [node(), deny_vote_already_voted, RV#rv.candidate_id]),
+        {RRV, Peer} = nilva_election:deny_vote(Data, RV),
+        cast(Peer, RRV),
+        {keep_state_and_data, []};
+% Request Votes request (valid)
+leader(cast, RV=#rv{candidates_term=CT}, Data=#raft{current_term=MyTerm})
+    when MyTerm < CT ->
+        % There is a candidate with higher term
+        % Step down & re-process this event
+        _Ignore =lager:info("{node:~p} {event:~p}", [node(), step_down_as_leader]),
+        NewData = update_term(Data, CT),
+        ProcessEventAsFollower = {next_event, cast, RV},
+        {next_state, follower, NewData, [ProcessEventAsFollower]};
+% Stale msg
+leader(cast, RRV= #rrv{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm =< Term ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), Term, leader,
+                            RRV, ignore]),
+        {keep_state_and_data, []};
+% Impossible message
+leader(cast, #rrv{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm > Term ->
+        Error = "Received a RRV from a future term. This should not even be possible",
+        _Ignore = lager:error(Error),
+        {stop, {error, Error}};
+% Stale msg
+leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm < Term ->
+        _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                            [node(), Term, leader,
+                            RAE, ignore]),
+        {keep_state_and_data, []};
+% Append Entries Reply (valid, current term)
+leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm =:= Term ->
+        % TODO: Handle other things that are not no_op
+        {keep_state_and_data, []};
+% Impossible message
+leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+    when PTerm > Term ->
+        Error = "Received a RAE from a future term. This should not even be possible",
+        _Ignore = lager:error(Error),
+        {stop, {error, Error}};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
+
 
 %% =========================================================================
 %% Helpers (Private)
@@ -371,6 +489,20 @@ init_raft_state(Config) ->
         match_idx = [{P, 0} || P <- Peers],
         election_timeout = nilva_election:get_election_timeout(Config)
     }.
+
+
+-spec update_term(raft_state(), raft_term()) -> raft_state().
+update_term(Raft = #raft{current_term = CT}, Term)
+    when Term > 0, CT < Term ->
+        % NOTE: Clear the voting related entries as we are in a new term
+        %       Reset the election timeout too
+        NewElectionTimeout = nilva_election:get_election_timeout(Raft#raft.config),
+        Raft#raft{current_term = Term,
+                  voted_for = undefined,
+                  votes_received = [],
+                  votes_rejected = [],
+                  election_timeout = NewElectionTimeout
+                  }.
 
 
 -spec get_peers(raft_state()) -> list(raft_peer_id()).

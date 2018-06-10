@@ -1,3 +1,5 @@
+% Contains any functions not related to raft or kv store
+%
 -module(nilva_helper).
 
 -export([getUniformRand/2, getUniformRandInt/2]).
