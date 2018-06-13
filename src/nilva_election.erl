@@ -7,6 +7,9 @@
 
 -include("nilva_types.hrl").
 
+-include_lib("eunit/include/eunit.hrl").
+
+
 -export([get_election_timeout/1]).
 -export([start_election/1, resend_request_votes/2, count_votes/2]).
 -export([is_viable_leader/2, cast_vote/2, deny_vote/2]).
@@ -17,7 +20,7 @@
 get_election_timeout(#raft_config{election_timeout_min=EMin,
                      election_timeout_max=EMax})
     when EMin > 0, EMax > EMin ->
-        nilva_helper:getUniformRandInt(EMax, EMax).
+        nilva_helper:getUniformRandInt(EMin, EMax).
 
 
 % Election related
@@ -171,3 +174,31 @@ get_previous_log_idx() -> 0.
 
 % TODO
 get_commit_idx() -> 0.
+
+
+%% =========================================================================
+%% Unit Tests
+%% =========================================================================
+
+get_election_timeout_test_() ->
+    % 1. Election Timeout must lie between min & max
+    % 2. Only those two in the config should affect it, i.e.,
+    %    setting peers etc., to different values should not affect
+    %    the election timeout as long as min & max are the same
+    Config = #raft_config{peers = [],
+                          heart_beat_interval = infinity,
+                          client_request_timeout = infinity,
+                          election_timeout_max=200,
+                          election_timeout_min=100},
+    InvalidConfig = #raft_config{
+                        peers = [],
+                        heart_beat_interval = infinity,
+                        client_request_timeout = infinity,
+                        election_timeout_max=200,
+                        election_timeout_min=300},
+    ET = get_election_timeout(Config),
+    [?_assert((ET >= 100) and (ET =< 200)),
+    ?_assertError(function_clause, get_election_timeout(InvalidConfig))].
+
+% Make sure we are getting a series of random numbers
+% Make this a property based test
