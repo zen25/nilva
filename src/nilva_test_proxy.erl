@@ -33,7 +33,7 @@
 % -export([drop_messages/0, delay_messages/0]).
 
 % Callbacks
--export([init/1, handle_call/3, handle_cast/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 
 %% =========================================================================
@@ -81,9 +81,10 @@ handle_cast({send_to, Node, Msg}, LoopData) ->
         {delay, T} ->
             _Ignore = lager:debug("Proxy delaying message from ~p to ~p by ~p",
                                  [node(), Node, T]),
-            timer:sleep(T),
-            % Send the message to proxy
-            gen_server:cast({?MODULE, Node}, Msg),
+            % Postpone message until timer alerts us
+            % NOTE: See "Timer Module" section in
+            %       http://erlang.org/doc/efficiency_guide/commoncaveats.html
+            _Ignore2 = erlang:send_after(T, self(), {delayed_outgoing, Msg, Node}),
             {noreply, NewLoopData}
     end;
 % Route incoming messages
@@ -103,10 +104,20 @@ handle_cast(Msg, LoopData) ->
         {delay, T} ->
             _Ignore = lager:debug("Proxy delaying message to ~p by ~p",
                                  [node(), T]),
-            timer:sleep(T),
-            gen_statem:cast(nilva_raft_fsm, Msg),
+            % Postpone message until timer alerts us
+            _Ignore2 = erlang:send_after(T, self(), {delayed_incoming, Msg}),
             {noreply, NewLoopData}
     end.
+
+
+handle_info({delayed_outgoing, Msg, Node}, Data) ->
+    % Send the message to proxy
+    gen_server:cast({?MODULE, Node}, Msg),
+    {noreply, Data};
+handle_info({delayed_incoming, Msg}, Data) ->
+    % Send message to fsm
+    gen_statem:cast(nilva_raft_fsm, Msg),
+    {noreply, Data}.
 
 
 -spec filter_message(proxy_mode()) -> {proxy_mode(), proxy_action()}.
