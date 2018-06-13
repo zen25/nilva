@@ -20,3 +20,11 @@ valid_ET(C) ->
     (ET =< C#raft_config.election_timeout_max).
 
 
+% TODO: Oh, god. Looks like testing records is going to be a nightmare.
+%       I should finish the log implementation before coming back to writing
+%       property based tests
+%
+% NOTE: While "Raft properties" are basically invariants, they are also based
+%       on the state of the cluster in a term. How do I convert them into PropEr
+%       tests?
+%       Is my initial idea of logging traces and reconciling them the only way?
