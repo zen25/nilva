@@ -2,12 +2,13 @@
  [{description, "A Key-Value Store based on Raft"},
   {vsn, "0.1.0"},
   % {registered, []},
-  {registered, [nilva_sup, nilva_raft_fsm, nilva_log_server]},
+  {registered, [nilva_sup, nilva_raft_fsm]},
   {mod, {nilva_app, []}},
   {applications,
    [kernel,
     stdlib,
-    lager
+    lager,
+    mnesia
    ]},
   {env,[]},
   {modules, []},

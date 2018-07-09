@@ -11,14 +11,12 @@ start_link() ->
 -ifndef(TEST).
 init(_Args) ->
     SupFlags = {one_for_all, 0, 10},
-    Children = [child(nilva_raft_fsm),
-                child(nilva_log_server)],
+    Children = [child(nilva_raft_fsm)],
     {ok, {SupFlags, Children}}.
 -else.
 init(_Args) ->
     SupFlags = {one_for_all, 0, 10},
     Children = [child(nilva_raft_fsm),
-                child(nilva_log_server),
                 % Start the proxy server too if testing
                 child(nilva_test_proxy)],
     {ok, {SupFlags, Children}}.

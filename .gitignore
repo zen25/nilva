@@ -15,3 +15,7 @@ log/
 nilva_cluster.config
 
 test/prop_nilva/.rebar3/erlcinfo
+
+*.DAT
+
+*.LOG
