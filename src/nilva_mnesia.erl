@@ -9,7 +9,7 @@
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
--define(TOK, {atomic, ok}).     % Transaction ok
+-define(TX_OK, {atomic, ok}).     % Transaction ok
 
 
 %% =========================================================================
@@ -76,16 +76,16 @@ create_tables() ->
     % the `aborted` case
     %
     % NOTE: All the tables will be local to the node. They won't be replicated.
-    ?TOK = mnesia:create_table(nilva_persistent_state,
+    ?TX_OK = mnesia:create_table(nilva_persistent_state,
             [{attributes, record_info(fields, nilva_persistent_state)},
             {disc_copies, [node()]}]),
-    ?TOK = mnesia:create_table(nilva_log_entry,
+    ?TX_OK = mnesia:create_table(nilva_log_entry,
             [{attributes, record_info(fields, nilva_log_entry)},
             {disc_copies, [node()]}]),
-    ?TOK = mnesia:create_table(nilva_term_lsn_range_idx,
+    ?TX_OK = mnesia:create_table(nilva_term_lsn_range_idx,
             [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
             {ram_copies, [node()]}]),
-    ?TOK = mnesia:create_table(nilva_state_transition,
+    ?TX_OK = mnesia:create_table(nilva_state_transition,
             [{attributes, record_info(fields, nilva_state_transition)},
             {disc_copies, [node()]}]).
 
@@ -94,33 +94,27 @@ create_tables() ->
 %% =========================================================================
 -spec get_current_term() -> raft_term() | {error, any()}.
 get_current_term() ->
-    Out = mnesia:transaction(fun() ->
-        [X] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
-        {_, _, CT, _} = X,
-        CT
-    end),
-    case Out of
-        {atomic, CT} -> CT;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+    F = fun() ->
+            [X] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
+            {_, _, CT, _} = X,
+            CT
+        end,
+    tx_run_and_get_result(F).
 
 
 -spec increment_current_term() -> ok | {error, any()}.
 increment_current_term() ->
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             [{_, CT, _}] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             % Reset voted_for when incrementing term
             mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY, CT + 1, undefined})
-          end),
-    case Out of
-        {atomic, _} -> ok;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+        end,
+   tx_run(F).
 
 
 -spec set_current_term(raft_term()) -> ok | {error, any()}.
 set_current_term(Term) ->
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
                 % Reset voted_for when term changes
@@ -136,31 +130,25 @@ set_current_term(Term) ->
                             mnesia:abort("Current term >= given term to update")
                     end
             end
-          end),
-    case Out of
-        ?TOK -> ok;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+        end,
+    tx_run(F).
 
 
 -spec get_voted_for() -> undefined | raft_peer_id() | {error, any()}.
 get_voted_for() ->
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
                 [] -> undefined;
                 [{_, _, _, Peer}] -> Peer
             end
-          end),
-    case Out of
-        {atomic, Peer} -> Peer;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+        end,
+    tx_run_and_get_result(F).
 
 
 -spec set_voted_for(raft_peer_id()) -> ok | already_voted | {error, any()}.
 set_voted_for(Peer) ->
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
                 [] -> mnesia:abort("No peristent raft state");
@@ -172,12 +160,8 @@ set_voted_for(Peer) ->
                 [{_, _, _, Peer}] -> ok;
                 [{_, _, _, _}] -> already_voted
             end
-          end),
-    case Out of
-        ?TOK -> ok;
-        {atomic, already_voted} -> already_voted;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+        end,
+    tx_run_and_get_result(F).
 
 %% =========================================================================
 %% Raft Replication Log
@@ -187,35 +171,47 @@ set_voted_for(Peer) ->
                                                | {error, any()}.
 lsn_2_term_N_idx(LSN) ->
     % TODO: Extract this pattern into a higher order function
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             Xs = mnesia:read(nilva_log_entry, LSN),
             case Xs of
-                [] -> mnesia:aborted("No such LSN");
+                [] -> mnesia:abort("No such LSN");
                 [{_, _, Term, Idx, _, _}] ->
                     {Term, Idx}
             end
-          end),
-    case Out of
-        {atomic, X} -> X;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
-    end.
+        end,
+    tx_run_and_get_result(F).
 
 -spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
                                                     | {error, any()}.
 term_N_idx_2_lsn(Term, Idx) ->
-    Out = mnesia:transaction(fun() ->
+    F = fun() ->
             Xs = mnesia:read(nilva_term_lsn_range_idx, Term),
             case Xs of
-                [] -> mnesia:aborted("No log entries for that term");
+                [] -> mnesia:abort("No log entries for that term");
                 [{_, _, S, E}] ->
                     N = E - S + 1,
                     case Idx < N of
                         true -> S + Idx;
-                        false -> mnesia:aborted("No log entries for that index")
+                        false -> mnesia:abort("No log entries for that index")
                     end
             end
-          end),
-    case Out of
-        {atomic, X} -> X;
-        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+        end,
+    tx_run_and_get_result(F).
+
+%% =========================================================================
+%% helpers (private)
+%% =========================================================================
+
+tx_run_and_get_result(F) ->
+    Res = mnesia:transaction(F),
+    case Res of
+        {atomic, Result} -> Result;
+        {aborted, Error} -> {error, {mnesia_error, Error}}
+    end.
+
+tx_run(F) ->
+    Res = mnesia:transaction(F),
+    case Res of
+        ?TX_OK -> ok;
+        {aborted, Error} -> {error, {mnesia_error, Error}}
     end.
