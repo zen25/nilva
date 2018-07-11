@@ -9,7 +9,7 @@
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
--define(TX_OK, {atomic, ok}).     % Transaction ok
+-define(TXN_OK, {atomic, ok}).     % Transaction ok
 
 
 %% =========================================================================
@@ -76,16 +76,16 @@ create_tables() ->
     % the `aborted` case
     %
     % NOTE: All the tables will be local to the node. They won't be replicated.
-    ?TX_OK = mnesia:create_table(nilva_persistent_state,
+    ?TXN_OK = mnesia:create_table(nilva_persistent_state,
             [{attributes, record_info(fields, nilva_persistent_state)},
             {disc_copies, [node()]}]),
-    ?TX_OK = mnesia:create_table(nilva_log_entry,
+    ?TXN_OK = mnesia:create_table(nilva_log_entry,
             [{attributes, record_info(fields, nilva_log_entry)},
             {disc_copies, [node()]}]),
-    ?TX_OK = mnesia:create_table(nilva_term_lsn_range_idx,
+    ?TXN_OK = mnesia:create_table(nilva_term_lsn_range_idx,
             [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
             {ram_copies, [node()]}]),
-    ?TX_OK = mnesia:create_table(nilva_state_transition,
+    ?TXN_OK = mnesia:create_table(nilva_state_transition,
             [{attributes, record_info(fields, nilva_state_transition)},
             {disc_copies, [node()]}]).
 
@@ -99,7 +99,7 @@ get_current_term() ->
             {_, _, CT, _} = X,
             CT
         end,
-    tx_run_and_get_result(F).
+    txn_run_and_get_result(F).
 
 
 -spec increment_current_term() -> ok | {error, any()}.
@@ -109,7 +109,7 @@ increment_current_term() ->
             % Reset voted_for when incrementing term
             mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY, CT + 1, undefined})
         end,
-   tx_run(F).
+   txn_run(F).
 
 
 -spec set_current_term(raft_term()) -> ok | {error, any()}.
@@ -131,7 +131,7 @@ set_current_term(Term) ->
                     end
             end
         end,
-    tx_run(F).
+    txn_run(F).
 
 
 -spec get_voted_for() -> undefined | raft_peer_id() | {error, any()}.
@@ -143,7 +143,7 @@ get_voted_for() ->
                 [{_, _, _, Peer}] -> Peer
             end
         end,
-    tx_run_and_get_result(F).
+    txn_run_and_get_result(F).
 
 
 -spec set_voted_for(raft_peer_id()) -> ok | already_voted | {error, any()}.
@@ -161,7 +161,7 @@ set_voted_for(Peer) ->
                 [{_, _, _, _}] -> already_voted
             end
         end,
-    tx_run_and_get_result(F).
+    txn_run_and_get_result(F).
 
 %% =========================================================================
 %% Raft Replication Log
@@ -179,7 +179,7 @@ lsn_2_term_N_idx(LSN) ->
                     {Term, Idx}
             end
         end,
-    tx_run_and_get_result(F).
+    txn_run_and_get_result(F).
 
 -spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
                                                     | {error, any()}.
@@ -196,22 +196,22 @@ term_N_idx_2_lsn(Term, Idx) ->
                     end
             end
         end,
-    tx_run_and_get_result(F).
+    txn_run_and_get_result(F).
 
 %% =========================================================================
 %% helpers (private)
 %% =========================================================================
 
-tx_run_and_get_result(F) ->
+txn_run_and_get_result(F) ->
     Res = mnesia:transaction(F),
     case Res of
         {atomic, Result} -> Result;
         {aborted, Error} -> {error, {mnesia_error, Error}}
     end.
 
-tx_run(F) ->
+txn_run(F) ->
     Res = mnesia:transaction(F),
     case Res of
-        ?TX_OK -> ok;
+        ?TXN_OK -> ok;
         {aborted, Error} -> {error, {mnesia_error, Error}}
     end.
