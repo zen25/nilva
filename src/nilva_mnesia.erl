@@ -5,6 +5,7 @@
 -export([init/0]).
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
 -export([get_voted_for/0, set_voted_for/1]).
+-export([lsn_2_term_N_idx/1, term_N_idx_2_lsn/2]).
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
@@ -21,9 +22,10 @@
 % NOTE: The structure of records is specific to mnesia. If you decide to use a different
 %       storage engine in the future, you would need to make appropriate changes
 %       to support the new storage engine's idiosyncrasies.
+% -type log_sequence_number() :: non_negative_integer().
 -record(nilva_log_entry, {
         % Primary key
-        lsn     :: non_neg_integer(),
+        lsn     :: log_sequence_number(),
         % term & idx form a composite primary key. We have lsn as a stand-in
         % though to make things easier
         term    :: raft_term(),
@@ -180,3 +182,40 @@ set_voted_for(Peer) ->
 %% =========================================================================
 %% Raft Replication Log
 %% =========================================================================
+
+-spec lsn_2_term_N_idx(log_sequence_number()) -> {raft_term(), raft_log_idx()}
+                                               | {error, any()}.
+lsn_2_term_N_idx(LSN) ->
+    % TODO: Extract this pattern into a higher order function
+    Out = mnesia:transaction(fun() ->
+            Xs = mnesia:read(nilva_log_entry, LSN),
+            case Xs of
+                [] -> mnesia:aborted("No such LSN");
+                [{_, _, Term, Idx, _, _}] ->
+                    {Term, Idx}
+            end
+          end),
+    case Out of
+        {atomic, X} -> X;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
+
+-spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
+                                                    | {error, any()}.
+term_N_idx_2_lsn(Term, Idx) ->
+    Out = mnesia:transaction(fun() ->
+            Xs = mnesia:read(nilva_term_lsn_range_idx, Term),
+            case Xs of
+                [] -> mnesia:aborted("No log entries for that term");
+                [{_, _, S, E}] ->
+                    N = E - S + 1,
+                    case Idx < N of
+                        true -> S + Idx;
+                        false -> mnesia:aborted("No log entries for that index")
+                    end
+            end
+          end),
+    case Out of
+        {atomic, X} -> X;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
