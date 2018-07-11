@@ -4,12 +4,16 @@
 -include("nilva_types.hrl").
 -export([init/0]).
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
+-export([get_voted_for/0, set_voted_for/1]).
 
 -export_type([nilva_log_entry/0,
              nilva_persistent_state/0,
              nilva_term_lsn_range_idx/0,
              nilva_state_transition/0
              ]).
+
+-define(PERISTANT_STATE_KEY, 0).    % Just a key, no practical significance
+-define(TOK, {atomic, ok}).     % Transaction ok
 
 % Mnesia Tables (first 2 are required for implementing raft, next 2 make testing and
 % implementation easier)
@@ -33,7 +37,7 @@
 -record(nilva_persistent_state, {
         % A peer has only 1 term at any time, so this table has
         % single record at all times
-        id              :: 0,
+        id              :: ?PERISTANT_STATE_KEY,
         current_term    :: raft_term(),
         voted_for       :: undefined | raft_peer_id()
         }).
@@ -58,42 +62,108 @@
 -opaque nilva_state_transition() :: #nilva_state_transition{}.
 
 
+-spec init() -> no_return().
 init() ->
     create_tables().
 
-
+-spec create_tables() -> no_return().
 create_tables() ->
-    mnesia:create_table(nilva_persistent_state,
-                        {attributes, record_info(fields, nilva_persistent_state)}),
-    mnesia:create_table(nilva_log_entry,
-                        {attributes, record_info(fields, nilva_log_entry)}),
-    mnesia:create_table(nilva_term_lsn_range_idx,
-                        {attributes, record_info(fields, nilva_term_lsn_range_idx)}),
-    mnesia:create_table(nilva_state_transition,
-                        {attributes, record_info(fields, nilva_state_transition)}).
+    % Hmm, it would be nice to have a monad like 'Either' here to handle
+    % the `aborted` case
+    ?TOK = mnesia:create_table(nilva_persistent_state,
+            [{attributes, record_info(fields, nilva_persistent_state)},
+            {disc_copies, [node()]}]).
+    % OK = mnesia:create_table(nilva_log_entry,
+    %         [{attributes, record_info(fields, nilva_log_entry)},
+    %         {disc_copies, [node()]}]),
+    % OK = mnesia:create_table(nilva_term_lsn_range_idx,
+    %         [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
+    %         {ram_copies, [node()]}]),
+    % OK = mnesia:create_table(nilva_state_transition,
+    %         [{attributes, record_info(fields, nilva_state_transition)},
+    %         {disc_copies, [node()]}]).
 
 
+-spec get_current_term() -> raft_term() | {error, any()}.
 get_current_term() ->
-    mnesia:transaction(fun() ->
-        [X] = mnesia:read(nilva_persistent_state, current_term),
-        X
-    end).
+    Out = mnesia:transaction(fun() ->
+        [X] = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+        {_, _, CT, _} = X,
+        CT
+    end),
+    case Out of
+        {atomic, CT} -> CT;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
 
+
+-spec increment_current_term() -> ok | {error, any()}.
 increment_current_term() ->
-    mnesia:transaction(fun() ->
-        [X] = mnesia:read(nilva_persistent_state, current_term),
-        mnesia:write({nilva_persistent_state, current_term, X + 1}),
-        [Y] = mnesia:read(nilva_persistent_state, current_term),
-        Y
-    end).
+    Out = mnesia:transaction(fun() ->
+            [{_, CT, _}] = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY, CT + 1, undefined})
+          end),
+    case Out of
+        {atomic, _} -> ok;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
 
+
+-spec set_current_term(raft_term()) -> ok | {error, any()}.
 set_current_term(Term) ->
-    mnesia:transaction(fun() ->
-        [X] = mnesia:read(nilva_persistent_state, current_term),
-        case X < Term of
-            true ->
-                mnesia:write({nilva_persistent_state, current_term, Term});
-            false ->
-                mnesia:abort("Current term >= given term to update")
-        end
-    end).
+    Out = mnesia:transaction(fun() ->
+            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            case Xs of
+                [] -> mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                                 Term, undefined});
+                [{_, _, CT, _}] ->
+                    case CT < Term of
+                        true ->
+                            mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                                         Term, undefined});
+                        false ->
+                            mnesia:abort("Current term >= given term to update")
+                    end
+            end
+          end),
+    case Out of
+        {atomic, _} -> ok;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
+
+
+-spec get_voted_for() -> undefined | raft_peer_id() | {error, any()}.
+get_voted_for() ->
+    Out = mnesia:transaction(fun() ->
+            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            case Xs of
+                [] -> undefined;
+                [{_, _, _, Peer}] -> Peer
+            end
+          end),
+    case Out of
+        {atomic, Peer} -> Peer;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
+
+
+-spec set_voted_for(raft_peer_id()) -> ok | already_voted | {error, any()}.
+set_voted_for(Peer) ->
+    Out = mnesia:transaction(fun() ->
+            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            case Xs of
+                [] -> mnesia:abort("No peristent raft state");
+                [{_, _, CT, undefined}] ->
+                    mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                                 CT, Peer}),
+                    ok;
+                % Idempotent vote
+                [{_, _, _, Peer}] -> ok;
+                [{_, _, _, _}] -> already_voted
+            end
+          end),
+    case Out of
+        {atomic, ok} -> ok;
+        {atomic, already_voted} -> already_voted;
+        {aborted, Reason} -> {error, {mnesia_error, Reason}}
+    end.
