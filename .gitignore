@@ -21,3 +21,5 @@ test/prop_nilva/.rebar3/erlcinfo
 *.LOG
 
 *.DCD
+
+*.DCL
