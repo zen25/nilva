@@ -12,7 +12,7 @@
              nilva_state_transition/0
              ]).
 
--define(PERISTANT_STATE_KEY, 0).    % Just a key, no practical significance
+-define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
 -define(TOK, {atomic, ok}).     % Transaction ok
 
 % Mnesia Tables (first 2 are required for implementing raft, next 2 make testing and
@@ -37,7 +37,7 @@
 -record(nilva_persistent_state, {
         % A peer has only 1 term at any time, so this table has
         % single record at all times
-        id              :: ?PERISTANT_STATE_KEY,
+        id              :: ?PERSISTENT_STATE_KEY,
         current_term    :: raft_term(),
         voted_for       :: undefined | raft_peer_id()
         }).
@@ -87,7 +87,7 @@ create_tables() ->
 -spec get_current_term() -> raft_term() | {error, any()}.
 get_current_term() ->
     Out = mnesia:transaction(fun() ->
-        [X] = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+        [X] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
         {_, _, CT, _} = X,
         CT
     end),
@@ -100,8 +100,8 @@ get_current_term() ->
 -spec increment_current_term() -> ok | {error, any()}.
 increment_current_term() ->
     Out = mnesia:transaction(fun() ->
-            [{_, CT, _}] = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
-            mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY, CT + 1, undefined})
+            [{_, CT, _}] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
+            mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY, CT + 1, undefined})
           end),
     case Out of
         {atomic, _} -> ok;
@@ -112,14 +112,14 @@ increment_current_term() ->
 -spec set_current_term(raft_term()) -> ok | {error, any()}.
 set_current_term(Term) ->
     Out = mnesia:transaction(fun() ->
-            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
-                [] -> mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                [] -> mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY,
                                  Term, undefined});
                 [{_, _, CT, _}] ->
                     case CT < Term of
                         true ->
-                            mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                            mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY,
                                          Term, undefined});
                         false ->
                             mnesia:abort("Current term >= given term to update")
@@ -135,7 +135,7 @@ set_current_term(Term) ->
 -spec get_voted_for() -> undefined | raft_peer_id() | {error, any()}.
 get_voted_for() ->
     Out = mnesia:transaction(fun() ->
-            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
                 [] -> undefined;
                 [{_, _, _, Peer}] -> Peer
@@ -150,11 +150,11 @@ get_voted_for() ->
 -spec set_voted_for(raft_peer_id()) -> ok | already_voted | {error, any()}.
 set_voted_for(Peer) ->
     Out = mnesia:transaction(fun() ->
-            Xs = mnesia:read(nilva_persistent_state, ?PERISTANT_STATE_KEY),
+            Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
                 [] -> mnesia:abort("No peristent raft state");
                 [{_, _, CT, undefined}] ->
-                    mnesia:write({nilva_persistent_state, ?PERISTANT_STATE_KEY,
+                    mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY,
                                  CT, Peer}),
                     ok;
                 % Idempotent vote
