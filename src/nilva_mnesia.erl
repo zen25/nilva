@@ -6,16 +6,16 @@
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
 -export([get_voted_for/0, set_voted_for/1]).
 
--export_type([nilva_log_entry/0,
-             nilva_persistent_state/0,
-             nilva_term_lsn_range_idx/0,
-             nilva_state_transition/0
-             ]).
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
 -define(TOK, {atomic, ok}).     % Transaction ok
 
-% Mnesia Tables (first 2 are required for implementing raft, next 2 make testing and
+
+%% =========================================================================
+%% Mnesia Tables
+%% =========================================================================
+
+% NOTE: First 2 are required for implementing raft, next 2 make testing and
 % implementation easier)
 %
 % NOTE: The structure of records is specific to mnesia. If you decide to use a different
@@ -31,8 +31,7 @@
         cmd     :: raft_commands(),
         res     :: rsm_response()
         }).
-% TODO: Handle the opaque type errors in dialyzer properly
--opaque nilva_log_entry() :: #nilva_log_entry{}.
+% -type nilva_log_entry() :: #nilva_log_entry{}.
 
 -record(nilva_persistent_state, {
         % A peer has only 1 term at any time, so this table has
@@ -41,7 +40,7 @@
         current_term    :: raft_term(),
         voted_for       :: undefined | raft_peer_id()
         }).
--opaque nilva_persistent_state() :: #nilva_persistent_state{}.
+% -type nilva_persistent_state() :: #nilva_persistent_state{}.
 
 -record(nilva_term_lsn_range_idx, {
         term        :: raft_term(),
@@ -50,7 +49,7 @@
         start_lsn   :: non_neg_integer(),
         end_lsn     :: non_neg_integer()
         }).
--opaque nilva_term_lsn_range_idx() :: #nilva_term_lsn_range_idx{}.
+% -type nilva_term_lsn_range_idx() :: #nilva_term_lsn_range_idx{}.
 
 -record(nilva_state_transition, {
         % fromTerm & toTerm form the composite primary key
@@ -59,8 +58,11 @@
         fromState   :: follower | candidate | leader,
         toState     :: follower | candidate | leader
         }).
--opaque nilva_state_transition() :: #nilva_state_transition{}.
+% -type nilva_state_transition() :: #nilva_state_transition{}.
 
+%% =========================================================================
+%% Mnesia setup etc.,
+%% =========================================================================
 
 -spec init() -> no_return().
 init() ->
@@ -85,7 +87,9 @@ create_tables() ->
             [{attributes, record_info(fields, nilva_state_transition)},
             {disc_copies, [node()]}]).
 
-
+%% =========================================================================
+%% Persistent Raft Peer State
+%% =========================================================================
 -spec get_current_term() -> raft_term() | {error, any()}.
 get_current_term() ->
     Out = mnesia:transaction(fun() ->
@@ -172,3 +176,7 @@ set_voted_for(Peer) ->
         {atomic, already_voted} -> already_voted;
         {aborted, Reason} -> {error, {mnesia_error, Reason}}
     end.
+
+%% =========================================================================
+%% Raft Replication Log
+%% =========================================================================
