@@ -70,18 +70,20 @@ init() ->
 create_tables() ->
     % Hmm, it would be nice to have a monad like 'Either' here to handle
     % the `aborted` case
+    %
+    % NOTE: All the tables will be local to the node. They won't be replicated.
     ?TOK = mnesia:create_table(nilva_persistent_state,
             [{attributes, record_info(fields, nilva_persistent_state)},
+            {disc_copies, [node()]}]),
+    ?TOK = mnesia:create_table(nilva_log_entry,
+            [{attributes, record_info(fields, nilva_log_entry)},
+            {disc_copies, [node()]}]),
+    ?TOK = mnesia:create_table(nilva_term_lsn_range_idx,
+            [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
+            {ram_copies, [node()]}]),
+    ?TOK = mnesia:create_table(nilva_state_transition,
+            [{attributes, record_info(fields, nilva_state_transition)},
             {disc_copies, [node()]}]).
-    % OK = mnesia:create_table(nilva_log_entry,
-    %         [{attributes, record_info(fields, nilva_log_entry)},
-    %         {disc_copies, [node()]}]),
-    % OK = mnesia:create_table(nilva_term_lsn_range_idx,
-    %         [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
-    %         {ram_copies, [node()]}]),
-    % OK = mnesia:create_table(nilva_state_transition,
-    %         [{attributes, record_info(fields, nilva_state_transition)},
-    %         {disc_copies, [node()]}]).
 
 
 -spec get_current_term() -> raft_term() | {error, any()}.
@@ -101,6 +103,7 @@ get_current_term() ->
 increment_current_term() ->
     Out = mnesia:transaction(fun() ->
             [{_, CT, _}] = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
+            % Reset voted_for when incrementing term
             mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY, CT + 1, undefined})
           end),
     case Out of
@@ -114,11 +117,13 @@ set_current_term(Term) ->
     Out = mnesia:transaction(fun() ->
             Xs = mnesia:read(nilva_persistent_state, ?PERSISTENT_STATE_KEY),
             case Xs of
+                % Reset voted_for when term changes
                 [] -> mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY,
                                  Term, undefined});
                 [{_, _, CT, _}] ->
                     case CT < Term of
                         true ->
+                            % Reset voted_for when term changes
                             mnesia:write({nilva_persistent_state, ?PERSISTENT_STATE_KEY,
                                          Term, undefined});
                         false ->
@@ -127,7 +132,7 @@ set_current_term(Term) ->
             end
           end),
     case Out of
-        {atomic, _} -> ok;
+        ?TOK -> ok;
         {aborted, Reason} -> {error, {mnesia_error, Reason}}
     end.
 
@@ -163,7 +168,7 @@ set_voted_for(Peer) ->
             end
           end),
     case Out of
-        {atomic, ok} -> ok;
+        ?TOK -> ok;
         {atomic, already_voted} -> already_voted;
         {aborted, Reason} -> {error, {mnesia_error, Reason}}
     end.
