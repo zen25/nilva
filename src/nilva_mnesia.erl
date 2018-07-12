@@ -6,6 +6,11 @@
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
 -export([get_voted_for/0, set_voted_for/1]).
 -export([lsn_2_term_N_idx/1, term_N_idx_2_lsn/2]).
+-export([get_log_entry/2,
+         get_log_entries/2,
+         erase_log_entries/2,
+         append_entries/1
+         ]).
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
@@ -71,6 +76,7 @@ init() ->
     create_tables().
 
 -spec create_tables() -> no_return().
+%% Private
 create_tables() ->
     % Hmm, it would be nice to have a monad like 'Either' here to handle
     % the `aborted` case
@@ -167,8 +173,32 @@ set_voted_for(Peer) ->
 %% Raft Replication Log
 %% =========================================================================
 
+append_entries(_LogEntries) ->
+    ok.
+
+get_log_entry(Term, Idx) ->
+    LSN = term_N_idx_2_lsn(Term, Idx),
+    F = fun() ->
+            Xs = mnesia:read(nilva_log_entry, LSN),
+            Xs
+        end,
+    LE = txn_run_and_get_result(F),
+    convert_to_log_entry(LE).
+
+get_log_entries(Term, Idx) ->
+    _StartingLSN = term_N_idx_2_lsn(Term, Idx),
+    Query = fun() -> to_do end,
+    txn_run_and_get_result(Query).
+
+erase_log_entries(Term, Idx) ->
+    _StartingLSN = term_N_idx_2_lsn(Term, Idx),
+    Query = fun() -> to_do end,
+    txn_run_and_get_result(Query).
+
+
 -spec lsn_2_term_N_idx(log_sequence_number()) -> {raft_term(), raft_log_idx()}
                                                | {error, any()}.
+%% Private
 lsn_2_term_N_idx(LSN) ->
     % TODO: Extract this pattern into a higher order function
     F = fun() ->
@@ -183,6 +213,7 @@ lsn_2_term_N_idx(LSN) ->
 
 -spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
                                                     | {error, any()}.
+%% Private
 term_N_idx_2_lsn(Term, Idx) ->
     F = fun() ->
             Xs = mnesia:read(nilva_term_lsn_range_idx, Term),
@@ -197,6 +228,16 @@ term_N_idx_2_lsn(Term, Idx) ->
             end
         end,
     txn_run_and_get_result(F).
+
+%% Private
+convert_to_log_entry(#nilva_log_entry{term=_Term, idx=_Idx, cmd=Cmd, res=Res}) ->
+    #log_entry{
+        lsn = 1,
+        status = volatile,
+        entry = Cmd,
+        response = Res
+    }.
+
 
 %% =========================================================================
 %% helpers (private)

@@ -5,15 +5,15 @@
 -include("nilva_types.hrl").
 
 -export([get_current_term/0,
-         voted_for/0,
-         voted_for/1
+         voted_for/0
          ]).
--export([is_log_complete/1,
-         check_for_conflicting_entries/1,
-         erase_conflicting_entries/1,
-         write_entries/1
+-export([get_log_entry/2,
+         get_log_entries/2,
+         erase_log_entries/2,
+         append_entries/1,
+         check_log_completeness/1
          ]).
--export([init_log/0, check_for_existing_log/0, load_log/0]).
+-export([init/0]).
 
 
 %% =========================================================================
@@ -22,43 +22,38 @@
 
 -spec get_current_term() -> raft_term().
 get_current_term() ->
-    1.
+    nilva_mnesia:get_current_term().
 
 -spec voted_for() -> raft_peer_id().
 voted_for() ->
-    voted_for(get_current_term()).
+    nilva_mnesia:get_voted_for().
 
--spec voted_for(raft_term()) -> raft_peer_id().
-voted_for(_Term) ->
-    node().
 
--spec is_log_complete({raft_term(), raft_log_idx()}) -> boolean().
-is_log_complete({_TermOfPrevEntry, _IdxOfPrevEntry}) ->
+-spec check_log_completeness(log_entry()) -> boolean().
+check_log_completeness(_LogEntry) ->
+    % TODO: Get term & idx from log entry & see if the command matches the entry in
+    %       in current log
     false.
 
--spec check_for_conflicting_entries(append_entries()) -> list({raft_term(), raft_log_idx()}).
-check_for_conflicting_entries(_AE) ->
-    [].
+-spec get_log_entry(raft_term(), raft_log_idx()) -> log_entry().
+get_log_entry(Term, Idx) ->
+    nilva_mnesia:get_log_entry(Term, Idx).
 
--spec erase_conflicting_entries({raft_term(), raft_log_idx()}) -> boolean().
-erase_conflicting_entries(_) ->
-    true.
+-spec get_log_entries(raft_term(), raft_log_idx()) -> list(log_entry()).
+% Returns log entries starting from given term & idx
+get_log_entries(Term, Idx) ->
+    nilva_mnesia:get_log_entries(Term, Idx).
 
--spec write_entries(append_entries()) -> boolean().
-write_entries(_AE) ->
-    true.
+-spec erase_log_entries(raft_term(), raft_log_idx()) -> no_return().
+erase_log_entries(Term, Idx) ->
+    nilva_mnesia:erase_log_entries(Term, Idx).
 
--spec init_log() -> boolean().
-init_log() ->
-    true.
+-spec append_entries(list(log_entry())) -> no_return().
+append_entries(LogEntries) ->
+    nilva_mnesia:append_entries(LogEntries).
 
--spec check_for_existing_log() -> boolean().
-check_for_existing_log() ->
-    false.
-
--spec load_log() -> boolean().
-load_log() ->
-    true.
+init() ->
+    nilva_mnesia:init().
 
 %% =========================================================================
 %% Private
