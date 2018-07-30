@@ -199,7 +199,7 @@ get_log_entries(Term, Idx) ->
 erase_log_entries(Term, Idx) ->
     StartingLSN = term_N_idx_2_lsn(Term, Idx),
     Query = fun() ->
-                Q =  qlc:q([mnesia:delete(X) ||
+                Q =  qlc:q([mnesia:delete(nilva_log_entry, X#nilva_log_entry.lsn) ||
                            X <- mnesia:table(nilva_log_entry),
                            X#nilva_log_entry.lsn >= StartingLSN]),
                 qlc:e(Q)
