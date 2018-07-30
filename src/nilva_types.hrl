@@ -32,7 +32,6 @@
 
 % Related to the log & log entries
 %
--type log_sequence_number() :: non_neg_integer().
 -type entry() :: client_request() | raft_commands().
 -type status() :: volatile | durable | committed | applied.
 -type rsm_response() :: 'undefined' | string().
@@ -45,24 +44,16 @@
 %% Log related records
 %% ========================================================================
 -record(log_entry, {
-        lsn             :: log_sequence_number(),
+        term            :: raft_term(),
+        index           :: raft_log_idx(),
         status          :: status(),
         entry           :: entry(),
         response        :: rsm_response()
         }).
 -type log_entry() :: #log_entry{}.
 
--type file_name() :: string().
--type storage() :: file_name().
-
--record(raft_log, {
-        log_entries     :: list(log_entry()),
-        storage         :: storage(),
-        last_applied    :: log_sequence_number(),
-        last_committed  :: log_sequence_number(),
-        last_written    :: log_sequence_number()
-        }).
--type raft_log() :: #raft_log{}.
+% Note that Mnesia is being used as a storage engine.
+% See nilva_mnesia.erl for more details
 
 %% ========================================================================
 %% Raft State

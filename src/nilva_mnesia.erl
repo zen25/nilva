@@ -7,7 +7,7 @@
 -export([get_voted_for/0, set_voted_for/1]).
 -export([lsn_2_term_N_idx/1, term_N_idx_2_lsn/2]).
 -export([get_log_entry/2,
-         get_log_entries/2,
+         get_log_entries_starting_from/2,
          erase_log_entries/2,
          append_entries/1
          ]).
@@ -22,12 +22,12 @@
 %% =========================================================================
 
 % NOTE: First 2 are required for implementing raft, next 2 make testing and
-% implementation easier)
+% implementation easier
 %
 % NOTE: The structure of records is specific to mnesia. If you decide to use a different
 %       storage engine in the future, you would need to make appropriate changes
 %       to support the new storage engine's idiosyncrasies.
-% -type log_sequence_number() :: non_negative_integer().
+-type log_sequence_number() :: non_neg_integer().
 -record(nilva_log_entry, {
         % Primary key
         lsn     :: log_sequence_number(),
@@ -38,14 +38,17 @@
         cmd     :: raft_commands(),
         res     :: rsm_response()
         }).
-% -type nilva_log_entry() :: #nilva_log_entry{}.
+-type nilva_log_entry() :: #nilva_log_entry{}.
 
 -record(nilva_persistent_state, {
         % A peer has only 1 term at any time, so this table has
         % single record at all times
         id              :: ?PERSISTENT_STATE_KEY,
         current_term    :: raft_term(),
-        voted_for       :: undefined | raft_peer_id()
+        voted_for       :: undefined | raft_peer_id(),
+        last_written    :: log_sequence_number(),
+        last_committed  :: log_sequence_number(),
+        last_applied    :: log_sequence_number()
         }).
 % -type nilva_persistent_state() :: #nilva_persistent_state{}.
 
@@ -81,7 +84,8 @@ create_tables() ->
     % Hmm, it would be nice to have a monad like 'Either' here to handle
     % the `aborted` case
     %
-    % NOTE: All the tables will be local to the node. They won't be replicated.
+    % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
+    %       Raft is responsible for replication
     ?TXN_OK = mnesia:create_table(nilva_persistent_state,
             [{attributes, record_info(fields, nilva_persistent_state)},
             {disc_copies, [node()]}]),
@@ -173,7 +177,12 @@ set_voted_for(Peer) ->
 %% Raft Replication Log
 %% =========================================================================
 
+% Assumes that log is up to date
+% Storage layer is dumb, it does not know about Raft's log requirements
 append_entries(_LogEntries) ->
+    % In a transaction,
+    % Write log entries to nilva_log_entry
+    % Update the nilva_term_lsn_range_idx
     ok.
 
 get_log_entry(Term, Idx) ->
@@ -185,8 +194,9 @@ get_log_entry(Term, Idx) ->
     LE = txn_run_and_get_result(F),
     convert_to_log_entry(LE).
 
+
 % Inclusive Range
-get_log_entries(Term, Idx) ->
+get_log_entries_starting_from(Term, Idx) ->
     StartingLSN = term_N_idx_2_lsn(Term, Idx),
     Query = fun() ->
                 Q =  qlc:q([X ||
@@ -196,20 +206,40 @@ get_log_entries(Term, Idx) ->
             end,
     txn_run_and_get_result(Query).
 
+
 erase_log_entries(Term, Idx) ->
     StartingLSN = term_N_idx_2_lsn(Term, Idx),
     Query = fun() ->
-                Q =  qlc:q([mnesia:delete(nilva_log_entry, X#nilva_log_entry.lsn) ||
+                Q =  qlc:q([mnesia:delete({nilva_log_entry, X#nilva_log_entry.lsn}) ||
                            X <- mnesia:table(nilva_log_entry),
                            X#nilva_log_entry.lsn >= StartingLSN]),
                 qlc:e(Q)
             end,
-    txn_run_and_get_result(Query).
+    txn_run(Query).
+
+
+%% =========================================================================
+%% helpers (private)
+%% =========================================================================
+
+txn_run_and_get_result(F) ->
+    Res = mnesia:transaction(F),
+    case Res of
+        {atomic, Result} -> Result;
+        {aborted, Error} -> {error, {mnesia_error, Error}}
+    end.
+
+
+txn_run(F) ->
+    Res = mnesia:transaction(F),
+    case Res of
+        ?TXN_OK -> ok;
+        {aborted, Error} -> {error, {mnesia_error, Error}}
+    end.
 
 
 -spec lsn_2_term_N_idx(log_sequence_number()) -> {raft_term(), raft_log_idx()}
                                                | {error, any()}.
-%% Private
 lsn_2_term_N_idx(LSN) ->
     F = fun() ->
             Xs = mnesia:read(nilva_log_entry, LSN),
@@ -221,9 +251,9 @@ lsn_2_term_N_idx(LSN) ->
         end,
     txn_run_and_get_result(F).
 
+
 -spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
                                                     | {error, any()}.
-%% Private
 term_N_idx_2_lsn(Term, Idx) ->
     F = fun() ->
             Xs = mnesia:read(nilva_term_lsn_range_idx, Term),
@@ -239,30 +269,13 @@ term_N_idx_2_lsn(Term, Idx) ->
         end,
     txn_run_and_get_result(F).
 
-%% Private
-convert_to_log_entry(#nilva_log_entry{term=_Term, idx=_Idx, cmd=Cmd, res=Res}) ->
+
+-spec convert_to_log_entry(nilva_log_entry()) -> log_entry().
+convert_to_log_entry(#nilva_log_entry{term=Term, idx=Idx, cmd=Cmd, res=Res}) ->
     #log_entry{
-        lsn = 1,
+        term = Term,
+        index = Idx,
         status = volatile,
         entry = Cmd,
         response = Res
     }.
-
-
-%% =========================================================================
-%% helpers (private)
-%% =========================================================================
-
-txn_run_and_get_result(F) ->
-    Res = mnesia:transaction(F),
-    case Res of
-        {atomic, Result} -> Result;
-        {aborted, Error} -> {error, {mnesia_error, Error}}
-    end.
-
-txn_run(F) ->
-    Res = mnesia:transaction(F),
-    case Res of
-        ?TXN_OK -> ok;
-        {aborted, Error} -> {error, {mnesia_error, Error}}
-    end.
