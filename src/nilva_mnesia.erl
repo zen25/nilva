@@ -185,14 +185,25 @@ get_log_entry(Term, Idx) ->
     LE = txn_run_and_get_result(F),
     convert_to_log_entry(LE).
 
+% Inclusive Range
 get_log_entries(Term, Idx) ->
-    _StartingLSN = term_N_idx_2_lsn(Term, Idx),
-    Query = fun() -> to_do end,
+    StartingLSN = term_N_idx_2_lsn(Term, Idx),
+    Query = fun() ->
+                Q =  qlc:q([X ||
+                           X <- mnesia:table(nilva_log_entry),
+                           X#nilva_log_entry.lsn >= StartingLSN]),
+                qlc:e(Q)
+            end,
     txn_run_and_get_result(Query).
 
 erase_log_entries(Term, Idx) ->
-    _StartingLSN = term_N_idx_2_lsn(Term, Idx),
-    Query = fun() -> to_do end,
+    StartingLSN = term_N_idx_2_lsn(Term, Idx),
+    Query = fun() ->
+                Q =  qlc:q([mnesia:delete(X) ||
+                           X <- mnesia:table(nilva_log_entry),
+                           X#nilva_log_entry.lsn >= StartingLSN]),
+                qlc:e(Q)
+            end,
     txn_run_and_get_result(Query).
 
 
@@ -200,7 +211,6 @@ erase_log_entries(Term, Idx) ->
                                                | {error, any()}.
 %% Private
 lsn_2_term_N_idx(LSN) ->
-    % TODO: Extract this pattern into a higher order function
     F = fun() ->
             Xs = mnesia:read(nilva_log_entry, LSN),
             case Xs of

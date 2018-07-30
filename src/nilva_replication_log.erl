@@ -41,6 +41,7 @@ get_log_entry(Term, Idx) ->
 
 -spec get_log_entries(raft_term(), raft_log_idx()) -> list(log_entry()).
 % Returns log entries starting from given term & idx
+% Useful for when the leader needs to overwrite it's peer's log
 get_log_entries(Term, Idx) ->
     nilva_mnesia:get_log_entries(Term, Idx).
 
