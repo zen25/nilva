@@ -5,10 +5,9 @@
 -export([init/0]).
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
 -export([get_voted_for/0, set_voted_for/1]).
--export([lsn_2_term_N_idx/1, term_N_idx_2_lsn/2]).
 -export([get_log_entry/2,
          get_log_entries_starting_from/2,
-         erase_log_entries/2,
+         del_log_entries_starting_from/2,
          append_entries/1
          ]).
 
@@ -27,14 +26,9 @@
 % NOTE: The structure of records is specific to mnesia. If you decide to use a different
 %       storage engine in the future, you would need to make appropriate changes
 %       to support the new storage engine's idiosyncrasies.
--type log_sequence_number() :: non_neg_integer().
 -record(nilva_log_entry, {
         % Primary key
-        lsn     :: log_sequence_number(),
-        % term & idx form a composite primary key. We have lsn as a stand-in
-        % though to make things easier
-        term    :: raft_term(),
-        idx     :: raft_log_idx(),
+        pk      :: {raft_term(), raft_log_idx()},
         cmd     :: raft_commands(),
         res     :: rsm_response()
         }).
@@ -45,21 +39,9 @@
         % single record at all times
         id              :: ?PERSISTENT_STATE_KEY,
         current_term    :: raft_term(),
-        voted_for       :: undefined | raft_peer_id(),
-        last_written    :: log_sequence_number(),
-        last_committed  :: log_sequence_number(),
-        last_applied    :: log_sequence_number()
+        voted_for       :: undefined | raft_peer_id()
         }).
 % -type nilva_persistent_state() :: #nilva_persistent_state{}.
-
--record(nilva_term_lsn_range_idx, {
-        term        :: raft_term(),
-        % Number of entries in term == end_lsn - start_lsn + 1
-        % end_lsn >= start_lsn
-        start_lsn   :: non_neg_integer(),
-        end_lsn     :: non_neg_integer()
-        }).
-% -type nilva_term_lsn_range_idx() :: #nilva_term_lsn_range_idx{}.
 
 -record(nilva_state_transition, {
         % fromTerm & toTerm form the composite primary key
@@ -75,6 +57,7 @@
 %% =========================================================================
 
 -spec init() -> no_return().
+% We assume mnesia schema has already been setup either manually or by setup script
 init() ->
     create_tables().
 
@@ -92,9 +75,6 @@ create_tables() ->
     ?TXN_OK = mnesia:create_table(nilva_log_entry,
             [{attributes, record_info(fields, nilva_log_entry)},
             {disc_copies, [node()]}]),
-    ?TXN_OK = mnesia:create_table(nilva_term_lsn_range_idx,
-            [{attributes, record_info(fields, nilva_term_lsn_range_idx)},
-            {ram_copies, [node()]}]),
     ?TXN_OK = mnesia:create_table(nilva_state_transition,
             [{attributes, record_info(fields, nilva_state_transition)},
             {disc_copies, [node()]}]).
@@ -182,14 +162,15 @@ set_voted_for(Peer) ->
 append_entries(_LogEntries) ->
     % In a transaction,
     % Write log entries to nilva_log_entry
-    % Update the nilva_term_lsn_range_idx
     ok.
 
 get_log_entry(Term, Idx) ->
-    LSN = term_N_idx_2_lsn(Term, Idx),
     F = fun() ->
-            Xs = mnesia:read(nilva_log_entry, LSN),
-            Xs
+            Xs = mnesia:read(nilva_log_entry, {Term, Idx}),
+            case Xs of
+                [] -> mnesia:abort("No such log entry");
+                [X] -> X
+            end
         end,
     LE = txn_run_and_get_result(F),
     convert_to_log_entry(LE).
@@ -197,25 +178,31 @@ get_log_entry(Term, Idx) ->
 
 % Inclusive Range
 get_log_entries_starting_from(Term, Idx) ->
-    StartingLSN = term_N_idx_2_lsn(Term, Idx),
     Query = fun() ->
                 Q =  qlc:q([X ||
                            X <- mnesia:table(nilva_log_entry),
-                           X#nilva_log_entry.lsn >= StartingLSN]),
+                           is_log_entry_after_given_entry(X, Term, Idx)]),
                 qlc:e(Q)
             end,
-    txn_run_and_get_result(Query).
+    LES = txn_run_and_get_result(Query),
+    lists:map(fun convert_to_log_entry/1, LES).
 
 
-erase_log_entries(Term, Idx) ->
-    StartingLSN = term_N_idx_2_lsn(Term, Idx),
+del_log_entries_starting_from(Term, Idx) ->
     Query = fun() ->
-                Q =  qlc:q([mnesia:delete({nilva_log_entry, X#nilva_log_entry.lsn}) ||
+                Q =  qlc:q([mnesia:delete({nilva_log_entry, X#nilva_log_entry.pk }) ||
                            X <- mnesia:table(nilva_log_entry),
-                           X#nilva_log_entry.lsn >= StartingLSN]),
+                           is_log_entry_after_given_entry(X, Term, Idx)]),
                 qlc:e(Q)
             end,
     txn_run(Query).
+
+
+%Private
+-spec is_log_entry_after_given_entry(nilva_log_entry(), raft_term(), raft_log_idx()) ->
+    boolean().
+is_log_entry_after_given_entry(#nilva_log_entry{pk={T, I}}, Term, Idx) ->
+    (Term =< T) and (Idx =< I).
 
 
 %% =========================================================================
@@ -234,44 +221,15 @@ txn_run(F) ->
     Res = mnesia:transaction(F),
     case Res of
         ?TXN_OK -> ok;
+        {atomic, []} -> ok;
+        {atomic, [ok]} -> ok;
         {aborted, Error} -> {error, {mnesia_error, Error}}
     end.
 
 
--spec lsn_2_term_N_idx(log_sequence_number()) -> {raft_term(), raft_log_idx()}
-                                               | {error, any()}.
-lsn_2_term_N_idx(LSN) ->
-    F = fun() ->
-            Xs = mnesia:read(nilva_log_entry, LSN),
-            case Xs of
-                [] -> mnesia:abort("No such LSN");
-                [{_, _, Term, Idx, _, _}] ->
-                    {Term, Idx}
-            end
-        end,
-    txn_run_and_get_result(F).
-
-
--spec term_N_idx_2_lsn(raft_term(), raft_log_idx()) -> log_sequence_number()
-                                                    | {error, any()}.
-term_N_idx_2_lsn(Term, Idx) ->
-    F = fun() ->
-            Xs = mnesia:read(nilva_term_lsn_range_idx, Term),
-            case Xs of
-                [] -> mnesia:abort("No log entries for that term");
-                [{_, _, S, E}] ->
-                    N = E - S + 1,
-                    case Idx < N of
-                        true -> S + Idx;
-                        false -> mnesia:abort("No log entries for that index")
-                    end
-            end
-        end,
-    txn_run_and_get_result(F).
-
-
 -spec convert_to_log_entry(nilva_log_entry()) -> log_entry().
-convert_to_log_entry(#nilva_log_entry{term=Term, idx=Idx, cmd=Cmd, res=Res}) ->
+convert_to_log_entry(#nilva_log_entry{pk=Pk, cmd=Cmd, res=Res}) ->
+    {Term, Idx} = Pk,
     #log_entry{
         term = Term,
         index = Idx,
