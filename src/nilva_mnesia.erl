@@ -8,7 +8,8 @@
 -export([get_log_entry/2,
          get_log_entries_starting_from/2,
          del_log_entries_starting_from/2,
-         write_entry/1
+         write_entry/1,
+         write_entries/1
          ]).
 
 
@@ -169,6 +170,16 @@ write_entry(#log_entry{term=Term, index=Idx, entry=LE}) ->
         end,
     txn_run(F).
 
+
+-spec write_entries(list(log_entry())) -> ok | {error, any()}.
+write_entries(LogEntries) ->
+    F = fun() ->
+            [mnesia:write({nilva_log_entry, {Term, Idx}, LE, undefined}) ||
+            #log_entry{term=Term, index=Idx, entry=LE} <- LogEntries]
+        end,
+    txn_run(F).
+
+
 get_log_entry(Term, Idx) ->
     F = fun() ->
             Xs = mnesia:read(nilva_log_entry, {Term, Idx}),
@@ -226,8 +237,8 @@ txn_run(F) ->
     Res = mnesia:transaction(F),
     case Res of
         ?TXN_OK -> ok;
-        {atomic, []} -> ok;
-        {atomic, [ok]} -> ok;
+        {atomic, Results} ->
+            lists:all(fun(X) -> X == ok end, Results);
         {aborted, Error} -> {error, {mnesia_error, Error}}
     end.
 

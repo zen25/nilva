@@ -50,10 +50,11 @@ erase_log_entries(Term, Idx) ->
     nilva_mnesia:del_log_entries_starting_from(Term, Idx).
 
 -spec append_entries(list(log_entry())) -> no_return().
+append_entries([LogEntry]) ->
+    nilva_mnesia:write_entry(LogEntry);
 append_entries(LogEntries) ->
-    % TODO: Do a bulk insert in a single transaction instead of using map and doing
-    %       multiple transactions. This should be faster
-    lists:map(fun nilva_mnesia:write_entry/1, LogEntries).
+    nilva_mnesia:write_entries(LogEntries).
+
 
 init() ->
     nilva_mnesia:init().
