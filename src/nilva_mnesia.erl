@@ -8,7 +8,7 @@
 -export([get_log_entry/2,
          get_log_entries_starting_from/2,
          del_log_entries_starting_from/2,
-         append_entries/1
+         write_entry/1
          ]).
 
 
@@ -159,10 +159,15 @@ set_voted_for(Peer) ->
 
 % Assumes that log is up to date
 % Storage layer is dumb, it does not know about Raft's log requirements
-append_entries(_LogEntries) ->
-    % In a transaction,
-    % Write log entries to nilva_log_entry
-    ok.
+%
+% Overwrites the entry if it already exists.
+% Raft has the mechanism to handle this case
+-spec write_entry(log_entry()) -> ok | {error, any()}.
+write_entry(#log_entry{term=Term, index=Idx, entry=LE}) ->
+    F = fun() ->
+            mnesia:write({nilva_log_entry, {Term, Idx}, LE, undefined})
+        end,
+    txn_run(F).
 
 get_log_entry(Term, Idx) ->
     F = fun() ->
