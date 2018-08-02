@@ -244,8 +244,8 @@ init_tables() ->
     F = fun() ->
             FirstValidTerm = 1,
             mnesia:write({nilva_persistent_state,
-                         ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined}),
-            mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
+                         ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined})
+            % mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
         end,
     Res = txn_run(F),
     erlang:display(Res).
