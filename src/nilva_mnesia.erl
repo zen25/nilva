@@ -51,7 +51,7 @@
         % fromTerm & toTerm form the composite primary key
         fromTerm    :: raft_term(),
         toTerm      :: raft_term(),
-        fromState   :: init | follower | candidate | leader,
+        fromState   :: boot | follower | candidate | leader,
         toState     :: follower | candidate | leader
         }).
 % -type nilva_state_transition() :: #nilva_state_transition{}.
@@ -245,9 +245,10 @@ init_tables() ->
             FirstValidTerm = 1,
             mnesia:write({nilva_persistent_state,
                          ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined}),
-            mnesia:write({nilva_state_transition, 0, FirstValidTerm, init, follower})
+            mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
         end,
-    txn_run(F).
+    Res = txn_run(F),
+    erlang:display(Res).
 
 
 txn_run_and_get_result(F) ->
