@@ -5,7 +5,9 @@
 -include("nilva_types.hrl").
 
 -export([get_current_term/0,
-         voted_for/0
+         set_current_term/1,
+         voted_for/0,
+         vote/1
          ]).
 -export([get_log_entry/2,
          get_log_entries/2,
@@ -24,9 +26,17 @@
 get_current_term() ->
     nilva_mnesia:get_current_term().
 
+-spec set_current_term(raft_term()) -> no_return().
+set_current_term(Term) ->
+    nilva_mnesia:set_current_term(Term).
+
 -spec voted_for() -> raft_peer_id().
 voted_for() ->
     nilva_mnesia:get_voted_for().
+
+-spec vote(raft_peer_id()) -> no_return().
+vote(Peer) ->
+    nilva_mnesia:set_voted_for(Peer).
 
 
 -spec check_log_completeness(log_entry()) -> boolean().

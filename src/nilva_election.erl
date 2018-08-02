@@ -64,10 +64,16 @@ count_votes(#rrv{peer_id=PeerId, vote_granted=VoteGranted},
 -spec start_election(raft_state()) ->
     {request_votes(), raft_state()}.
 start_election(R = #raft{current_term=T}) ->
-    % TODO: Persist the two below
+    % Persist state
+    nilva_replication_log:set_current_term(T + 1),
+    nilva_replication_log:vote(node()),
+    CT = nilva_replication_log:get_current_term(),
+    VF = nilva_replication_log:voted_for(),
+
+    % Update local data and create request votes request
     NewR = R#raft{
-                current_term = T + 1,
-                voted_for = node(),
+                current_term = CT,
+                voted_for = VF,
                 votes_received = [],
                 votes_rejected = [],
                 % Calculate new election timeout for next term
@@ -121,6 +127,8 @@ is_viable_leader(Data = #raft{current_term=CurrentTerm}, RV = #rv{candidates_ter
     {reply_request_votes(), raft_peer_id(), raft_state()}.
 cast_vote(Data, #rv{candidate_id=From, candidates_term=Term}) ->
     % Update to candidate's term
+    nilva_replication_log:set_current_term(Term),
+    nilva_replication_log:vote(From),
     NewData = Data#raft{voted_for=From, current_term=Term},
     RRV = #rrv{
                peers_current_term = Term,
