@@ -16,6 +16,9 @@
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
 -define(TXN_OK, {atomic, ok}).     % Transaction ok
 
+% Supress some dialyzer warnings that you know are not true
+% TODO: Supress only for `nilva_persistent_state` & `nilva_state_transition`
+% -dialyzer({get_warnings, false}).
 
 %% =========================================================================
 %% Mnesia Tables
