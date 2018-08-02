@@ -480,6 +480,7 @@ cast(Node, Msg) ->
 
 -spec init_raft_state(raft_config()) -> raft_state().
 init_raft_state(Config) ->
+    nilva_replication_log:init(),
     Peers = Config#raft_config.peers,
     #raft{
         config = Config,

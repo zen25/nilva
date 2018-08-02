@@ -51,7 +51,7 @@
         % fromTerm & toTerm form the composite primary key
         fromTerm    :: raft_term(),
         toTerm      :: raft_term(),
-        fromState   :: follower | candidate | leader,
+        fromState   :: init | follower | candidate | leader,
         toState     :: follower | candidate | leader
         }).
 % -type nilva_state_transition() :: #nilva_state_transition{}.
@@ -64,34 +64,8 @@
 % We assume mnesia schema has already been setup either manually or by setup script
 % TODO: Automate the schema creation if not present
 init() ->
-    create_tables().
-
--spec create_tables() -> boolean().
-%% Private
-create_tables() ->
-    % Hmm, it would be nice to have a monad like 'Either' here to handle
-    % the `aborted` case
-    %
-    % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
-    %       Raft is responsible for replication
-    Tbls = [nilva_persistent_state, nilva_log_entry, nilva_state_transition],
-    erlang:display(Tbls),
-    Results = lists:map(fun create_table_if_not_exists/1, Tbls),
-    erlang:display(Results),
-    lists:all(fun(X) -> X == ok end, Results).
-
-
--spec create_table_if_not_exists(atom()) -> ok | {error, any()}.
-create_table_if_not_exists(TblName) ->
-    Res = mnesia:create_table(TblName,
-                              [{attributes, record_info(fields, nilva_log_entry)},
-                              {disc_copies, [node()]}]),
-    erlang:display(Res),
-    case Res of
-        ?TXN_OK -> ok;
-        {aborted, {already_exists, TblName}} -> ok;
-        {aborted, Error} -> {error, Error}
-    end.
+    create_tables(),
+    init_tables().
 
 
 %% =========================================================================
@@ -238,6 +212,43 @@ is_log_entry_after_given_entry(#nilva_log_entry{pk={T, I}}, Term, Idx) ->
 %% =========================================================================
 %% helpers (private)
 %% =========================================================================
+
+-spec create_tables() -> boolean().
+create_tables() ->
+    % Hmm, it would be nice to have a monad like 'Either' here to handle
+    % the `aborted` case
+    %
+    % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
+    %       Raft is responsible for replication
+    Tbls = [nilva_persistent_state, nilva_log_entry, nilva_state_transition],
+    erlang:display(Tbls),
+    Results = lists:map(fun create_table_if_not_exists/1, Tbls),
+    erlang:display(Results),
+    lists:all(fun(X) -> X == ok end, Results).
+
+
+-spec create_table_if_not_exists(atom()) -> ok | {error, any()}.
+create_table_if_not_exists(TblName) ->
+    Res = mnesia:create_table(TblName,
+                              [{attributes, record_info(fields, nilva_log_entry)},
+                              {disc_copies, [node()]}]),
+    erlang:display(Res),
+    case Res of
+        ?TXN_OK -> ok;
+        {aborted, {already_exists, TblName}} -> ok;
+        {aborted, Error} -> {error, Error}
+    end.
+
+
+init_tables() ->
+    F = fun() ->
+            FirstValidTerm = 1,
+            mnesia:write({nilva_persistent_state,
+                         ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined}),
+            mnesia:write({nilva_state_transition, 0, FirstValidTerm, init, follower})
+        end,
+    txn_run(F).
+
 
 txn_run_and_get_result(F) ->
     Res = mnesia:transaction(F),
