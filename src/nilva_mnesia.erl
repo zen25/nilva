@@ -57,12 +57,13 @@
 %% Mnesia setup etc.,
 %% =========================================================================
 
--spec init() -> no_return().
+-spec init() -> boolean().
 % We assume mnesia schema has already been setup either manually or by setup script
+% TODO: Automate the schema creation if not present
 init() ->
     create_tables().
 
--spec create_tables() -> no_return().
+-spec create_tables() -> boolean().
 %% Private
 create_tables() ->
     % Hmm, it would be nice to have a monad like 'Either' here to handle
@@ -70,15 +71,25 @@ create_tables() ->
     %
     % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
     %       Raft is responsible for replication
-    ?TXN_OK = mnesia:create_table(nilva_persistent_state,
-            [{attributes, record_info(fields, nilva_persistent_state)},
-            {disc_copies, [node()]}]),
-    ?TXN_OK = mnesia:create_table(nilva_log_entry,
-            [{attributes, record_info(fields, nilva_log_entry)},
-            {disc_copies, [node()]}]),
-    ?TXN_OK = mnesia:create_table(nilva_state_transition,
-            [{attributes, record_info(fields, nilva_state_transition)},
-            {disc_copies, [node()]}]).
+    Tbls = [nilva_persistent_state, nilva_log_entry, nilva_state_transition],
+    erlang:display(Tbls),
+    Results = lists:map(fun create_table_if_not_exists/1, Tbls),
+    erlang:display(Results),
+    lists:all(fun(X) -> X == ok end, Results).
+
+
+-spec create_table_if_not_exists(atom()) -> ok | {error, any()}.
+create_table_if_not_exists(TblName) ->
+    Res = mnesia:create_table(TblName,
+                              [{attributes, record_info(fields, nilva_log_entry)},
+                              {disc_copies, [node()]}]),
+    erlang:display(Res),
+    case Res of
+        ?TXN_OK -> ok;
+        {aborted, {already_exists, TblName}} -> ok;
+        {aborted, Error} -> {error, Error}
+    end.
+
 
 %% =========================================================================
 %% Persistent Raft Peer State

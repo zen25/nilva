@@ -23,3 +23,5 @@ test/prop_nilva/.rebar3/erlcinfo
 *.DCD
 
 *.DCL
+
+*.BUP

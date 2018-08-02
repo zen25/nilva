@@ -154,9 +154,16 @@ Rebar3 comes with lots of features. Some things I was not aware of:
 + running dialyzer compiles the code. No need to do the compile step as a
   separate step
 + you can launch an app by:
-    > rebar3 shell --apps nilva
+    > rebar3 shell --apps nilva --sname peer1
 + you can run in test configuration by running:
-    > rebar3 as test shell --apps nilva
+    > rebar3 as test shell --apps nilva --name peer1@host
++ As we are using Mnesia as the storage engine for raft logs, we need to
+  create the mnesia schema before launching nilva. We can do this by:
+    > erl -sname peer1
+    > mnesia:create_schema([node()]).
+  We would need to do this on every node prior to launching Nilva.
+  TODO: Automate this at some point
+
 
 See: (https://ferd.ca/rebar3-shell.html)
 
