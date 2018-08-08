@@ -497,6 +497,7 @@ update_term(Raft = #raft{current_term = CT}, Term)
     when Term > 0, CT < Term ->
         % NOTE: Clear the voting related entries as we are in a new term
         %       Reset the election timeout too
+        nilva_replication_log:set_current_term(Term),
         NewElectionTimeout = nilva_election:get_election_timeout(Raft#raft.config),
         Raft#raft{current_term = Term,
                   voted_for = undefined,
