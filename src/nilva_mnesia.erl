@@ -221,9 +221,7 @@ create_tables() ->
     % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
     %       Raft is responsible for replication
     Tbls = [nilva_persistent_state, nilva_log_entry, nilva_state_transition],
-    erlang:display(Tbls),
     Results = lists:map(fun create_table_if_not_exists/1, Tbls),
-    erlang:display(Results),
     lists:all(fun(X) -> X == ok end, Results).
 
 
@@ -232,7 +230,6 @@ create_table_if_not_exists(TblName) ->
     Res = mnesia:create_table(TblName,
                               [{attributes, record_info(fields, nilva_log_entry)},
                               {disc_copies, [node()]}]),
-    erlang:display(Res),
     case Res of
         ?TXN_OK -> ok;
         {aborted, {already_exists, TblName}} -> ok;
@@ -247,8 +244,7 @@ init_tables() ->
                          ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined})
             % mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
         end,
-    Res = txn_run(F),
-    erlang:display(Res).
+    txn_run(F).
 
 
 txn_run_and_get_result(F) ->
