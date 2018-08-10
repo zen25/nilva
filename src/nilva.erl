@@ -23,3 +23,32 @@ get_state() ->
 
 get_state(Node) ->
     gen_statem:call({nilva_raft_fsm, Node}, get_state).
+
+
+-spec leader() -> node().
+leader() ->
+    node().
+
+
+get(Key) ->
+    % TODO
+    Key.
+
+
+set(Key, Value) ->
+    % TODO
+    ok.
+
+
+del(Key) ->
+    % TODO
+    ok.
+
+
+% Is CAS enough to support transactions?
+% I know you can implement mutexes with it so may be we can implement
+% a lock service?
+% Raft ensures the transaction order in all nodes is the same
+cas(Key, ExpectedValue, NewValue) ->
+    % TODO
+    ok.
