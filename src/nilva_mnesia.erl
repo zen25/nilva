@@ -16,9 +16,10 @@
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
 -define(TXN_OK, {atomic, ok}).     % Transaction ok
 
-% Supress some dialyzer warnings that you know are not true
-% TODO: Supress only for `nilva_persistent_state` & `nilva_state_transition`
-% -dialyzer({get_warnings, false}).
+% NOTE: Supresses unused record dialyzer warnings that you know are not true
+% Not really intended to be an export
+-export_type([nilva_state_transition/0,
+             nilva_persistent_state/0]).
 
 %% =========================================================================
 %% Mnesia Tables
@@ -45,7 +46,7 @@
         current_term    :: raft_term(),
         voted_for       :: undefined | raft_peer_id()
         }).
-% -type nilva_persistent_state() :: #nilva_persistent_state{}.
+-opaque nilva_persistent_state() :: #nilva_persistent_state{}.
 
 -record(nilva_state_transition, {
         % fromTerm & toTerm form the composite primary key
@@ -54,7 +55,7 @@
         fromState   :: boot | follower | candidate | leader,
         toState     :: follower | candidate | leader
         }).
-% -type nilva_state_transition() :: #nilva_state_transition{}.
+-opaque nilva_state_transition() :: #nilva_state_transition{}.
 
 %% =========================================================================
 %% Mnesia setup etc.,

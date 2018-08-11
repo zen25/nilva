@@ -5,6 +5,8 @@
 -export([echo_fsm/1, echo_fsm_all/2]).
 -export([get_state/0, get_state/1]).
 
+-export([leader/0, get/1, set/2, del/1, cas/3]).
+
 % Note: All the echo functions are synchronous
 echo_fsm(Msg) ->
     nilva_raft_fsm:echo(Msg).
@@ -27,20 +29,24 @@ get_state(Node) ->
 
 -spec leader() -> node().
 leader() ->
+    % TODO: Get the current leader
     node().
 
 
+-spec get(any()) -> {value, any()} | key_does_not_exist
+                  | not_a_leader | unavailable.
 get(Key) ->
     % TODO
     Key.
 
 
-set(Key, Value) ->
+-spec set(any(), any()) -> ok | not_a_leader | unavailable.
+set(_Key, _Value) ->
     % TODO
     ok.
 
-
-del(Key) ->
+-spec del(any()) -> ok | not_a_leader | unavailable.
+del(_Key) ->
     % TODO
     ok.
 
@@ -49,6 +55,8 @@ del(Key) ->
 % I know you can implement mutexes with it so may be we can implement
 % a lock service?
 % Raft ensures the transaction order in all nodes is the same
-cas(Key, ExpectedValue, NewValue) ->
+-spec cas(any(), any(), any()) -> {value, any()} | key_does_not_exist
+                                | not_a_leader | unavailable.
+cas(_Key, ExpectedValue, _NewValue) ->
     % TODO
-    ok.
+    ExpectedValue.

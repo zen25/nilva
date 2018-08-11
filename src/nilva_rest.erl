@@ -45,6 +45,8 @@ allowed_methods(Req, State) ->
     % Another way to achieve this would be to expose functionality via C
     % and then build a client library based on it for each desired language
     % This gets around the hacks I would require to support transactions via rest
+    %
+    % See Hashicorp's Consul for how they support transactions via http
     Methods = [<<"GET">>, <<"POST">>, <<"DELETE">>],
     {Methods, Req, State}.
 

@@ -446,6 +446,12 @@ leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
 
+% Client request must be redirected when in Follower state
+% Deny the client request during Candidate State
+%
+% As leader,
+% replicate the client request, once replicated on all peers, apply to rsm
+% and return the result to client. Notify the peers about commit index too
 
 %% =========================================================================
 %% Helpers (Private)
