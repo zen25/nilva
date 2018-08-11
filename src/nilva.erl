@@ -7,25 +7,10 @@
 
 -export([leader/0, get/1, set/2, del/1, cas/3]).
 
-% Note: All the echo functions are synchronous
-echo_fsm(Msg) ->
-    nilva_raft_fsm:echo(Msg).
 
--spec echo_fsm_all(string(), list()) -> list().
-echo_fsm_all(Msg, Nodes) ->
-    [nilva_raft_fsm:echo(Msg, N) || N <- Nodes].
-
--spec set_test_proxy_all(any(), list()) -> list().
-set_test_proxy_all(Msg, Nodes) ->
-    [nilva_test_proxy:set(Msg, N) || N <- Nodes].
-
-% Returns the Raft FSM state of the current node
-get_state() ->
-    gen_statem:call(nilva_raft_fsm, get_state).
-
-get_state(Node) ->
-    gen_statem:call({nilva_raft_fsm, Node}, get_state).
-
+%% =========================================================================
+%% KV Store Public API
+%% =========================================================================
 
 -spec leader() -> node().
 leader() ->
@@ -45,6 +30,7 @@ set(_Key, _Value) ->
     % TODO
     ok.
 
+
 -spec del(any()) -> ok | not_a_leader | unavailable.
 del(_Key) ->
     % TODO
@@ -60,3 +46,27 @@ del(_Key) ->
 cas(_Key, ExpectedValue, _NewValue) ->
     % TODO
     ExpectedValue.
+
+
+%% =========================================================================
+%% Debug Functions
+%% =========================================================================
+
+% Note: All the echo functions are synchronous
+echo_fsm(Msg) ->
+    nilva_raft_fsm:echo(Msg).
+
+-spec echo_fsm_all(string(), list()) -> list().
+echo_fsm_all(Msg, Nodes) ->
+    [nilva_raft_fsm:echo(Msg, N) || N <- Nodes].
+
+-spec set_test_proxy_all(any(), list()) -> list().
+set_test_proxy_all(Msg, Nodes) ->
+    [nilva_test_proxy:set(Msg, N) || N <- Nodes].
+
+% Returns the Raft FSM state of the current node
+get_state() ->
+    gen_statem:call(nilva_raft_fsm, get_state).
+
+get_state(Node) ->
+    gen_statem:call({nilva_raft_fsm, Node}, get_state).
