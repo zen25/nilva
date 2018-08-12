@@ -8,10 +8,6 @@
 %% Cluster & Peer management
 -export([start/2, start_link/0, stop/1, join/1]).
 
-%% Replicated State Machine (RSM) commands
-%% TODO: Separate the RSM from Raft consensus modules
--export([get/1, put/1, delete/1]).
-
 % gen_statem callbacks & state
 -export([init/1,
         callback_mode/0,
