@@ -443,6 +443,10 @@ leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
 leader({call, From}, {client_request, Req}, Data) ->
+    % NOTE: gen_statem does not have selective recieve. You can simulate
+    %       it by postponing the events that you are not interested in and
+    %       and using a buffer to store the interesting events.
+    % TODO: Collect multiple client requests and handle them together
     {Reply, NewData} = handle_client_request(Req, Data),
     {keep_state, NewData, [{reply, From, Reply}]};
 leader(EventType, EventContent, Data) ->
