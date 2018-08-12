@@ -447,8 +447,17 @@ leader({call, From}, {client_request, Req}, Data) ->
     %       it by postponing the events that you are not interested in and
     %       and using a buffer to store the interesting events.
     % TODO: Collect multiple client requests and handle them together
-    {Reply, NewData} = handle_client_request(Req, Data),
-    {keep_state, NewData, [{reply, From, Reply}]};
+    NewData = handle_client_request(Req, Data),
+    % NOTE: The reply should happen after the rsm command has been applied
+    %       For that to happen, we cannot block here.
+    %       We probably need to include From address in the rsm command or
+    %       have a map of CSN -> From somewhere
+    %
+    % NOTE: Client is still waiting in the mean time as it made a synchronous
+    %       call.
+    % TODO: Where & how should you handle client request timeouts? Makes sense
+    %       to handle it on the client side
+    {keep_state, NewData, []};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
@@ -474,8 +483,7 @@ handle_event(_, _, #raft{current_term=T}) ->
     {keep_state_and_data, []}.
 
 
--spec handle_client_request(client_request(), raft_state()) ->
-    {response_to_client(), raft_state()}.
+-spec handle_client_request(client_request(), raft_state()) -> raft_state().
 % TODO
 %
 % Add the command to log, send append entries, wait for quorum,
