@@ -5,6 +5,7 @@
 -export([start/2, stop/1]).
 
 start(_Type, _Args) ->
+    lager:start(),
     nilva_rest:init_cowboy(),
     nilva_sup:start_link().
 
