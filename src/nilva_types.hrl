@@ -103,7 +103,11 @@
         % track of client requests we have not handled in a buffer
         % until we run into a msg that is not a client request.
         % Then we handle the client request in bulk
-        client_requests_buffer = [] :: list(client_request())
+        client_requests_buffer = [] :: list(client_request()),
+
+        % Keeps track of which csn response must be sent to which client
+        % TODO: How do you specify the type for keys & values if you want to?
+        csn_2_from = #{} :: map()
         }).
 -type raft_state() :: #raft{}.
 
