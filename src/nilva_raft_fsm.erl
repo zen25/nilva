@@ -22,26 +22,6 @@
 % For testing & debugging
 -export([echo/1, echo/2]).
 
-%% =========================================================================
-%% Public API for CLient to interact with RSM
-%% =========================================================================
-
-% TODO: Is this a good idea, we can still get the errors if we call using put
--spec get(client_request()) -> response_to_client().
-get({CSN, get, {key, K}}) ->
-    % TODO:
-    %       Convert to and fro from (CSN, string()) to internal types
-    {CSN, {value, K}}.
-
--spec put(client_request()) -> response_to_client().
-put({CSN, put, {key, _K}, {value, _V}}) ->
-    % TODO
-    {CSN, ok}.
-
--spec delete(client_request()) -> response_to_client().
-delete({CSN, delete, {key, _K}}) ->
-    % TODO
-    {CSN, ok}.
 
 %% =========================================================================
 %% Raft Peer/Cluster API
