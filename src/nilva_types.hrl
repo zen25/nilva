@@ -24,6 +24,8 @@
 -type kv_error() :: {'error', string()}
                   | unavailable
                   | not_a_leader.
+% Address of the client that we can use to reply to
+-type client() :: any().
 -type client_command() :: get | put | delete | cas.
 -type client_request() :: {csn(), get, key()}
                         | {csn(), put, key(), value()}

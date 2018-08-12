@@ -442,12 +442,12 @@ leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
         Error = "Received a RAE from a future term. This should not even be possible",
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
-leader({call, _From}, {client_request, Req}, Data) ->
+leader({call, From}, {client_request, Req}, Data) ->
     % NOTE: gen_statem does not have selective recieve. You can simulate
     %       it by postponing the events that you are not interested in and
     %       and using a buffer to store the interesting events.
     % TODO: Collect multiple client requests and handle them together
-    NewData = handle_client_request(Req, Data),
+    NewData = buffer_client_request(From, Req, Data),
     % NOTE: The reply should happen after the rsm command has been applied
     %       For that to happen, we cannot block here.
     %       We probably need to include From address in the rsm command or
@@ -483,22 +483,14 @@ handle_event(_, _, #raft{current_term=T}) ->
     {keep_state_and_data, []}.
 
 
--spec handle_client_request(client_request(), raft_state()) -> raft_state().
-% TODO
-%
-% Add the command to log, send append entries, wait for quorum,
-% and reply back to client.
-% Hmm, some problems I can think of:
-%
-% 1. How to handle multiple append entries?
-% 2. How to not block other client requests while processing this?
-handle_client_request({_CSN, get, _K} , Data) ->
+-spec buffer_client_request(client(), client_request(), raft_state()) -> raft_state().
+buffer_client_request(_From, {_CSN, get, _K} , Data) ->
     Data;
-handle_client_request({_CSN, put, _K, _V}, Data) ->
+buffer_client_request(_From, {_CSN, put, _K, _V}, Data) ->
     Data;
-handle_client_request({_CSN, delete, _K}, Data) ->
+buffer_client_request(_From, {_CSN, delete, _K}, Data) ->
     Data;
-handle_client_request({_CSN, cas, _K, _EV, _NV}, Data) ->
+buffer_client_request(_From, {_CSN, cas, _K, _EV, _NV}, Data) ->
     Data.
 
 
