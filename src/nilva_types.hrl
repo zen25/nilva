@@ -93,7 +93,17 @@
         match_idx           :: list({raft_peer_id(), raft_log_idx()}),
 
         % timeouts
-        election_timeout    :: timeout()   % calculated every term
+        election_timeout    :: timeout(),   % calculated every term
+
+        % Implementation specific
+
+        % A buffer to store client requests.
+        %
+        % There is no selective receive in gen_statem. We keep
+        % track of client requests we have not handled in a buffer
+        % until we run into a msg that is not a client request.
+        % Then we handle the client request in bulk
+        client_requests_buffer = [] :: list(client_request())
         }).
 -type raft_state() :: #raft{}.
 
