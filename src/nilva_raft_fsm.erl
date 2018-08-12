@@ -473,6 +473,13 @@ handle_event(_, _, #raft{current_term=T}) ->
 -spec handle_client_request(client_request(), raft_state()) ->
     {response_to_client(), raft_state()}.
 % TODO
+%
+% Add the command to log, send append entries, wait for quorum,
+% and reply back to client.
+% Hmm, some problems I can think of:
+%
+% 1. How to handle multiple append entries?
+% 2. How to not block other client requests while processing this?
 handle_client_request({CSN, get, _K} , Data) ->
     {{CSN, unavailable}, Data};
 handle_client_request({CSN, put, _K, _V}, Data) ->
