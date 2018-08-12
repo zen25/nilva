@@ -60,7 +60,7 @@ init(_Args) ->
             Data = init_raft_state(Config),
             _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                                  [node(), -1, init, successfully_read_config, start]),
-            _Ignore2 = lager:debug("election_timeout:~p", [Data#raft.election_timeout]),
+            _Ignore2 = lager:info("election_timeout:~p", [Data#raft.election_timeout]),
             ElectionTimeOutAction = {{timeout, election_timeout},
                                     Data#raft.election_timeout, election_timeout },
             {ok, follower, Data, [ElectionTimeOutAction]}
@@ -95,7 +95,7 @@ follower(enter, leader, Data) ->
         [stop_heartbeat_timer(Data), start_election_timer(Data)]};
 % Election timeout
 follower({timeout, election_timeout}, election_timeout, Data) ->
-    _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
+    _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), Data#raft.current_term, follower,
                         election_timeout, nominate_self]),
     {next_state, candidate, Data};
@@ -203,7 +203,7 @@ candidate(enter, leader, _) ->
 candidate({timeout, election_timeout}, election_timeout, Data) ->
     % Start a new election
     {RV, NewData} = nilva_election:start_election(Data),
-    _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
+    _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), NewData#raft.current_term, candidate,
                         election_timeout, start_election]),
     % TODO: Persist data before broadcasting request votes
