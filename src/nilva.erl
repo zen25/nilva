@@ -5,8 +5,8 @@
 -export([echo_fsm/1, echo_fsm_all/2]).
 -export([get_state/0, get_state/1]).
 
--export([leader/0, get/1, set/2, del/1, cas/3]).
-
+-export([leader/0, get/2, put/3, delete/2, cas/4]).
+-include("nilva_types.hrl").
 
 %% =========================================================================
 %% KV Store Public API
@@ -18,33 +18,46 @@ leader() ->
     node().
 
 
--spec get(any()) -> {value, any()} | key_does_not_exist
-                  | not_a_leader | unavailable.
-get(Key) ->
+-spec get(csn(), key()) ->
+    {value, value()}
+    | key_does_not_exist
+    | not_a_leader
+    | unavailable.
+get(CSN, Key) ->
     % TODO
-    Key.
+    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, get, Key}}).
 
 
--spec set(any(), any()) -> ok | not_a_leader | unavailable.
-set(_Key, _Value) ->
+-spec put(csn(), key(), value()) ->
+    ok
+    | not_a_leader
+    | unavailable.
+put(CSN, Key, Value) ->
     % TODO
-    ok.
+    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, put, Key, Value}}).
 
 
--spec del(any()) -> ok | not_a_leader | unavailable.
-del(_Key) ->
+-spec delete(csn(), key()) ->
+    ok
+    | not_a_leader
+    | unavailable.
+delete(CSN, Key) ->
     % TODO
-    ok.
+    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, delete, Key}}).
 
 
 % Is CAS enough to support transactions?
 % I know you can implement mutexes with it so may be we can implement
 % a lock service?
 % Raft ensures the transaction order in all nodes is the same
--spec cas(any(), any(), any()) -> {value, any()} | key_does_not_exist
-                                | not_a_leader | unavailable.
-cas(_Key, ExpectedValue, _NewValue) ->
-    % TODO
+-spec cas(csn(), key(), value(), value()) ->
+    {value, any()}
+    | key_does_not_exist
+    | not_a_leader
+    | unavailable.
+cas(CSN, Key, ExpectedValue, NewValue) ->
+    gen_statem:call(nilva_raft_fsm, {client_request,
+                    {CSN, cas, Key, ExpectedValue, NewValue}}),
     ExpectedValue.
 
 

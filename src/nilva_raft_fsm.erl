@@ -442,6 +442,9 @@ leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
         Error = "Received a RAE from a future term. This should not even be possible",
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
+leader({call, From}, {client_request, Req}, Data) ->
+    {Reply, NewData} = handle_client_request(Req, Data),
+    {keep_state, NewData, [{reply, From, Reply}]};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
@@ -465,6 +468,20 @@ handle_event(_, _, #raft{current_term=T}) ->
     _Ignore = lager:info("node:~p term:~p state:~p event:~p action:~p",
                          [node(), T, any, received_unknown_message, ignoring_unknown_message]),
     {keep_state_and_data, []}.
+
+
+-spec handle_client_request(client_request(), raft_state()) ->
+    {response_to_client(), raft_state()}.
+% TODO
+handle_client_request({CSN, get, _K} , Data) ->
+    {{CSN, unavailable}, Data};
+handle_client_request({CSN, put, _K, _V}, Data) ->
+    {{CSN, unavailable}, Data};
+handle_client_request({CSN, delete, _K}, Data) ->
+    {{CSN, unavailable}, Data};
+handle_client_request({CSN, cas, _K, _EV, _NV}, Data) ->
+    {{CSN, unavailable}, Data}.
+
 
 
 % TODO: Fix the dialyzer error "Created function has no local return"

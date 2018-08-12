@@ -21,11 +21,14 @@
 % Note: Trying to simulate phantom types for string.
 -type key() :: {'key', string()}.
 -type value() :: {'value', string()}.
--type kv_error() :: {'error', string()}.
--type client_command() :: 'get' | 'put' | 'delete'.
--type client_request() :: {csn(), 'get', key()}
-                        | {csn(), 'put', key(), value()}
-                        | {csn(), 'delete', key()}.
+-type kv_error() :: {'error', string()}
+                  | unavailable
+                  | not_a_leader.
+-type client_command() :: get | put | delete | cas.
+-type client_request() :: {csn(), get, key()}
+                        | {csn(), put, key(), value()}
+                        | {csn(), delete, key()}
+                        | {csn(), cas, key(), value(), value()}.
 -type response_to_client() :: {csn(), 'ok'}         % for put or delete
                             | {csn(), value()}      % for get
                             | {csn(), kv_error()}.  % for errors
