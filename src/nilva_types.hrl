@@ -124,7 +124,12 @@
         % last log entry as the primary key is {raft_term(), raft_idx()}.
         % Hence, we are keeping track of them here.
         last_log_idx = 0      :: raft_log_idx(),
-        last_log_term = 0     :: raft_term()
+        last_log_term = 0     :: raft_term(),
+
+        % RSM KV Store
+        %
+        % Replcae this with something more robust at a later point
+        kv_store = #{}        :: map()
         }).
 -type raft_state() :: #raft{}.
 
