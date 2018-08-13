@@ -432,6 +432,10 @@ leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
         Error = "Received a RAE from a future term. This should not even be possible",
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
+% Client Request
+%
+% Replicate the client request, once replicated on quorum of peers, apply to rsm
+% and return the result to client. Notify the peers about commit index too
 leader({call, From}, {client_request, Req}, Data) ->
     % NOTE: gen_statem does not have selective recieve. You can simulate
     %       it by postponing the events that you are not interested in and
@@ -452,12 +456,6 @@ leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
 
-% Client request must be redirected when in Follower state
-% Deny the client request during Candidate State
-%
-% As leader,
-% replicate the client request, once replicated on all peers, apply to rsm
-% and return the result to client. Notify the peers about commit index too
 
 %% =========================================================================
 %% Helpers (Private)
