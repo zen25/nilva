@@ -451,6 +451,12 @@ leader({call, From}, {client_request, Req}, Data) ->
     %       call.
     % TODO: Where & how should you handle client request timeouts? Makes sense
     %       to handle it on the client side
+    %
+    % TODO: Broadcast of AEs should happen once we encounter a msg that is
+    %       not a client request.
+    % AEs = make_append_entries(Data#raft.client_requests_buffer, Data),
+    AEs = make_append_entries([Req], Data),
+    broadcast(get_peers(Data), AEs),
     {keep_state, NewData, []};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
@@ -472,6 +478,8 @@ handle_event(_, _, #raft{current_term=T}) ->
 
 
 -spec buffer_client_request(client(), client_request(), raft_state()) -> raft_state().
+% TODO: Buffer requests
+%       As a first pass, implemented only single element append entries
 buffer_client_request(_From, {_CSN, get, _K} , Data) ->
     Data;
 buffer_client_request(_From, {_CSN, put, _K, _V}, Data) ->
@@ -480,6 +488,18 @@ buffer_client_request(_From, {_CSN, delete, _K}, Data) ->
     Data;
 buffer_client_request(_From, {_CSN, cas, _K, _EV, _NV}, Data) ->
     Data.
+
+
+-spec make_append_entries([client_request()], raft_state()) -> append_entries().
+make_append_entries(ClientRequests, Data) ->
+    #ae{
+        leaders_term    = Data#raft.current_term,
+        leader_id       = node(),
+        prev_log_idx    = Data#raft.last_log_idx,
+        prev_log_term   = Data#raft.last_log_term,
+        entries         = ClientRequests,
+        leaders_commit_idx = Data#raft.commit_idx
+    }.
 
 
 
