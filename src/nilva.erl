@@ -5,7 +5,7 @@
 -export([echo_fsm/1, echo_fsm_all/2]).
 -export([get_state/0, get_state/1]).
 
--export([leader/0, get/2, put/3, delete/2, cas/4]).
+-export([leader/0, get/3, put/4, delete/3, cas/5]).
 -include("nilva_types.hrl").
 
 %% =========================================================================
@@ -18,46 +18,53 @@ leader() ->
     node().
 
 
--spec get(csn(), key()) ->
+-spec get(raft_peer_id(), csn(), key()) ->
     {value, value()}
     | key_does_not_exist
     | not_a_leader
     | unavailable.
-get(CSN, Key) ->
+get(Peer, CSN, Key) ->
     % TODO
-    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, get, Key}}).
+    gen_statem:call({nilva_raft_fsm, Peer},
+                    {client_request,
+                        {CSN, get, Key}}).
 
 
--spec put(csn(), key(), value()) ->
+-spec put(raft_peer_id(), csn(), key(), value()) ->
     ok
     | not_a_leader
     | unavailable.
-put(CSN, Key, Value) ->
+put(Peer, CSN, Key, Value) ->
     % TODO
-    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, put, Key, Value}}).
+    gen_statem:call({nilva_raft_fsm, Peer},
+                    {client_request,
+                        {CSN, put, Key, Value}}).
 
 
--spec delete(csn(), key()) ->
+-spec delete(raft_peer_id(), csn(), key()) ->
     ok
     | not_a_leader
     | unavailable.
-delete(CSN, Key) ->
+delete(Peer, CSN, Key) ->
     % TODO
-    gen_statem:call(nilva_raft_fsm, {client_request, {CSN, delete, Key}}).
+    gen_statem:call({nilva_raft_fsm, Peer},
+                    {client_request,
+                        {CSN, delete, Key}}).
 
 
 % Is CAS enough to support transactions?
 % I know you can implement mutexes with it so may be we can implement
 % a lock service?
 % Raft ensures the transaction order in all nodes is the same
--spec cas(csn(), key(), value(), value()) ->
+-spec cas(raft_peer_id(), csn(), key(), value(), value()) ->
     {value, any()}
     | key_does_not_exist
     | not_a_leader
     | unavailable.
-cas(CSN, Key, ExpectedValue, NewValue) ->
-    gen_statem:call(nilva_raft_fsm, {client_request,
-                    {CSN, cas, Key, ExpectedValue, NewValue}}),
+cas(Peer, CSN, Key, ExpectedValue, NewValue) ->
+    gen_statem:call({nilva_raft_fsm, Peer},
+                    {client_request,
+                        {CSN, cas, Key, ExpectedValue, NewValue}}),
     ExpectedValue.
 
 

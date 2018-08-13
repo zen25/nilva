@@ -455,6 +455,9 @@ leader({call, From}, {client_request, Req}, Data) ->
     % TODO: Broadcast of AEs should happen once we encounter a msg that is
     %       not a client request.
     % AEs = make_append_entries(Data#raft.client_requests_buffer, Data),
+    ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                    [node(), Data#raft.current_term, leader,
+                    {client_request, Req}, handle_client_request]),
     AEs = make_append_entries([Req], Data),
     broadcast(get_peers(Data), AEs),
     {keep_state, NewData, []};
