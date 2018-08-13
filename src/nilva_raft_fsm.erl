@@ -173,6 +173,14 @@ follower(cast, #rae{}, #raft{current_term=FT}) ->
     _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                         [node(), FT, follower, stale_rae, ignore]),
     {keep_state_and_data, []};
+% Client Request
+%
+% Simply return that you are not a leader, the client can try the other peers
+% till it finds the leader.
+% TODO: Return the leader if known
+follower({call, From}, {client_request, _}, _) ->
+    Reply = not_a_leader,
+    {keep_state_and_data, [{reply, From, Reply}]};
 % Events not part of Raft
 follower(EventType, EventContent, Data) ->
     % Handle the rest
@@ -303,6 +311,12 @@ candidate(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Ter
                             [node(), Term, candidate,
                             RAE, ignore]),
         {keep_state_and_data, []};
+% Client Request
+%
+% Simply return that you are not available for processing requests. Client
+% can either try other peers or wait & retry
+candidate({call, From}, {client_request, _}, _) ->
+    {keep_state_and_data, [{reply, From, unavailable}]};
 % Impossible message
 candidate(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
     when PTerm >= Term ->
