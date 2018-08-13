@@ -122,6 +122,19 @@ follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_te
                    },
         cast(AE#ae.leader_id, RAE),
         {keep_state, NewData, [reset_election_timer(NewData)]};
+% Append Entries request (valid, leader with higher term)
+follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
+    when FT < LT ->
+        NewData = update_term(Data, LT),
+        {keep_state, NewData, [{next_event, cast, AE}]};
+% Append Entries request (valid, leader with current term)
+follower(cast, _AE=#ae{leaders_term=LT}, _Data=#raft{current_term=FT})
+    when FT =:= LT ->
+        % TODO
+        % Check log completeness,
+        % If log is complete, append entries to log and ack to leader
+        % If log is not complete, reject append entries
+        {keep_state_and_data, []};
 % Append Entries request (invalid)
 follower(cast, AE=#ae{leaders_term=LT}, #raft{current_term=FT})
     when FT > LT ->
@@ -459,8 +472,15 @@ leader({call, From}, {client_request, Req}, Data) ->
                     [node(), Data#raft.current_term, leader,
                     {client_request, Req}, handle_client_request]),
     AEs = make_append_entries([Req], Data),
-    broadcast(get_peers(Data), AEs),
-    {keep_state, NewData, []};
+    LogEntries = convert_ae_to_log_entries(AEs),
+    nilva_replication_log:append_entries(LogEntries),
+    [LastLogEntry | _] = lists:reverse(LogEntries),
+    NewData2 = NewData#raft{
+                    last_log_idx = LastLogEntry#log_entry.index,
+                    last_log_term = LastLogEntry#log_entry.term
+                    },
+    broadcast(get_peers(NewData2), AEs),
+    {keep_state, NewData2, []};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
@@ -505,6 +525,13 @@ make_append_entries(ClientRequests, Data) ->
     }.
 
 
+-spec convert_ae_to_log_entries(append_entries()) -> list(log_entry()).
+convert_ae_to_log_entries(_AE) ->
+    % Monotonically increase index starting from last_log_index if the term is the
+    % same, otherwise add a no-op and increment the index starting from 0.
+    %
+    % TODO
+    [].
 
 % TODO: Fix the dialyzer error "Created function has no local return"
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().
