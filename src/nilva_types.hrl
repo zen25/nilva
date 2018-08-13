@@ -97,7 +97,9 @@
         % timeouts
         election_timeout    :: timeout(),   % calculated every term
 
+        %
         % Implementation specific
+        %
 
         % A buffer to store client requests.
         %
@@ -109,7 +111,16 @@
 
         % Keeps track of which csn response must be sent to which client
         % TODO: How do you specify the type for keys & values if you want to?
-        csn_2_from = #{} :: map()
+        csn_2_from = #{} :: map(),
+
+        % Log Entries specific
+        %
+        % We are storing log entries as records in Mnesia.
+        % There is no easy way to do "log_entries[-1]" to get the
+        % last log entry as the primary key is {raft_term(), raft_idx()}.
+        % Hence, we are keeping track of them here.
+        last_log_idx = 0      :: raft_log_idx(),
+        last_log_term = 0     :: raft_term()
         }).
 -type raft_state() :: #raft{}.
 

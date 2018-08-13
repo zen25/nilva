@@ -82,8 +82,8 @@ start_election(R = #raft{current_term=T}) ->
     RV = #rv{
              candidates_term = NewR#raft.current_term,
              candidate_id = NewR#raft.voted_for,
-             last_log_idx = get_previous_log_idx(),
-             last_log_term = get_previous_log_term()
+             last_log_idx = NewR#raft.last_log_idx,
+             last_log_term = NewR#raft.last_log_term
             },
     {RV, NewR}.
 
@@ -96,8 +96,8 @@ resend_request_votes(R = #raft{votes_received=PTrue, votes_rejected=PFalse}, All
     RV = #rv{
             candidates_term = R#raft.current_term,
             candidate_id = R#raft.voted_for,
-            last_log_idx = get_previous_log_idx(),
-            last_log_term = get_previous_log_term()
+            last_log_idx = R#raft.last_log_idx,
+            last_log_term = R#raft.last_log_term
             },
     {RV, Unresponsive_peers}.
 
@@ -151,14 +151,14 @@ deny_vote(#raft{current_term=CurrentTerm}, #rv{candidate_id=From}) ->
 
 -spec send_heart_beats(raft_state()) ->
     append_entries().
-send_heart_beats(#raft{current_term=Term}) ->
+send_heart_beats(R = #raft{current_term=Term}) ->
     AE = #ae {
              leaders_term = Term,
              leader_id = node(),
-             prev_log_idx = get_previous_log_idx(),
-             prev_log_term = get_previous_log_term(),
+             prev_log_idx = R#raft.last_log_idx,
+             prev_log_term = R#raft.last_log_term,
              entries = [no_op],
-             leaders_commit_idx = get_commit_idx()
+             leaders_commit_idx = R#raft.commit_idx
              },
     AE.
 
@@ -173,15 +173,6 @@ is_log_up_to_date(#rv{candidate_id='suppree@dialyzer.error'}) ->
     false;
 is_log_up_to_date(_RV) ->
     true.
-
-% TODO
-get_previous_log_term() -> 0.
-
-% TODO
-get_previous_log_idx() -> 0.
-
-% TODO
-get_commit_idx() -> 0.
 
 
 %% =========================================================================
