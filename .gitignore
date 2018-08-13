@@ -25,3 +25,5 @@ test/prop_nilva/.rebar3/erlcinfo
 *.DCL
 
 *.BUP
+
+*.crashdump
