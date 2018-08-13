@@ -107,6 +107,10 @@
         % track of client requests we have not handled in a buffer
         % until we run into a msg that is not a client request.
         % Then we handle the client request in bulk
+        %
+        % TODO: We need a threshold on how long to wait before
+        %       sending append entries or how many append entries
+        %       should be buffered at max before they are serviced
         client_requests_buffer = [] :: list(client_request()),
 
         % Keeps track of which csn response must be sent to which client
