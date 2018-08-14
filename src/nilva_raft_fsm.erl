@@ -477,14 +477,7 @@ leader({call, From}, {client_request, Req}, Data) ->
 % and return the result to client. Notify the peers about commit index too
 leader(cast, process_buffered_requests, Data) ->
     AEs = make_append_entries(Data),
-    LogEntries = convert_ae_to_log_entries(AEs),
-    nilva_replication_log:append_entries(LogEntries),
-    [LastLogEntry | _] = lists:reverse(LogEntries),
-    NewData = Data#raft{
-                    client_requests_buffer = [],
-                    last_log_idx = LastLogEntry#log_entry.index,
-                    last_log_term = LastLogEntry#log_entry.term
-                },
+    NewData = append_entries_to_log(AEs, Data),
     broadcast(get_peers(NewData), AEs),
     {keep_state, NewData, []};
 leader(EventType, EventContent, Data) ->
@@ -515,6 +508,7 @@ buffer_client_request(From, Req = {CSN, _, _} , Data) ->
     %       so that a single reverse gives us the correct requests order.
     %
     % NOTE: Order of arrival is important as we intend to provide linearizability
+    % TODO: Setup a test to check this
     Client_requests_buffer = [Req] ++ Data#raft.client_requests_buffer,
     Data#raft{
         client_requests_buffer = Client_requests_buffer,
@@ -534,6 +528,24 @@ buffer_client_request(From, Req = {CSN, _, _, _, _}, Data) ->
         client_requests_buffer = Client_requests_buffer,
         csn_2_client = CSN_2_Client
     }.
+
+
+-spec append_entries_to_log(append_entries(), raft_state()) ->
+    raft_state() | failed_to_update_log.
+append_entries_to_log(AE, Data) ->
+    % TODO: Check log completion as it is required for the followers
+    % NOTE: Leader's log is the single source of truth. It is
+    %       by definition complete. Hence, log completion should
+    %       always return true for the leader
+    LogEntries = convert_ae_to_log_entries(AE),
+    nilva_replication_log:append_entries(LogEntries),
+    [LastLogEntry | _] = lists:reverse(LogEntries),
+    NewData = Data#raft{
+                    client_requests_buffer = [],
+                    last_log_idx = LastLogEntry#log_entry.index,
+                    last_log_term = LastLogEntry#log_entry.term
+                },
+    NewData.
 
 
 -spec make_append_entries(raft_state()) -> append_entries().
@@ -558,7 +570,7 @@ convert_ae_to_log_entries(_AE) ->
     % TODO
     [].
 
-% TODO: Fix the dialyzer error "Created function has no local return"
+
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().
 broadcast(Peers, Msg) ->
     lists:foreach(fun(Node) -> cast(Node, Msg) end, Peers).

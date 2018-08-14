@@ -114,6 +114,7 @@
         client_requests_buffer = [] :: list(client_request()),
 
         % Keeps track of which response must be sent to which client
+        % Key :: csn(), Value :: client()
         csn_2_client = #{} :: map(),
 
         % Log Entries specific
