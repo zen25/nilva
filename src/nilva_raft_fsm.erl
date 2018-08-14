@@ -134,6 +134,8 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
         % Check log completeness,
         % If log is complete, append entries to log and ack to leader
         % If log is not complete, reject append entries
+        ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                        [node(), FT, follower, AE, append_entries_to_log]),
         NewData = append_entries_to_log(AE, Data),
         RAE = #rae{
                 peers_current_term = FT,
@@ -442,9 +444,11 @@ leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
                             RAE, ignore]),
         {keep_state_and_data, []};
 % Append Entries Reply (valid, current term)
-leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
     when PTerm =:= Term ->
         % TODO: Handle other things that are not no_op
+        ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
+                        [node(), Term, leader, RAE, handle_reply_ae]),
         {keep_state_and_data, []};
 % Impossible message
 leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
