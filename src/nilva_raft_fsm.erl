@@ -522,14 +522,14 @@ buffer_client_request(From, Req = {CSN, _, _} , Data) ->
     };
 buffer_client_request(From, Req = {CSN, _, _, _}, Data) ->
     CSN_2_Client = maps:put(CSN, From, Data#raft.csn_2_client),
-    Client_requests_buffer = Data#raft.client_requests_buffer ++ [Req],
+    Client_requests_buffer = [Req] ++ Data#raft.client_requests_buffer,
     Data#raft{
         client_requests_buffer = Client_requests_buffer,
         csn_2_client = CSN_2_Client
     };
 buffer_client_request(From, Req = {CSN, _, _, _, _}, Data) ->
     CSN_2_Client = maps:put(CSN, From, Data#raft.csn_2_client),
-    Client_requests_buffer = Data#raft.client_requests_buffer ++ [Req],
+    Client_requests_buffer = [Req] ++ Data#raft.client_requests_buffer,
     Data#raft{
         client_requests_buffer = Client_requests_buffer,
         csn_2_client = CSN_2_Client
