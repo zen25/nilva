@@ -113,9 +113,8 @@
         %       should be buffered at max before they are serviced
         client_requests_buffer = [] :: list(client_request()),
 
-        % Keeps track of which csn response must be sent to which client
-        % TODO: How do you specify the type for keys & values if you want to?
-        csn_2_from = #{} :: map(),
+        % Keeps track of which response must be sent to which client
+        csn_2_client = #{} :: map(),
 
         % Log Entries specific
         %
