@@ -445,10 +445,7 @@ leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
         Error = "Received a RAE from a future term. This should not even be possible",
         _Ignore = lager:error(Error),
         {stop, {error, Error}};
-% Client Request
-%
-% Replicate the client request, once replicated on quorum of peers, apply to rsm
-% and return the result to client. Notify the peers about commit index too
+% Buffer Client Requests
 leader({call, From}, {client_request, Req}, Data) ->
     % NOTE: gen_statem does not have selective recieve. You can simulate
     %       it by postponing the events that you are not interested in and
@@ -471,16 +468,24 @@ leader({call, From}, {client_request, Req}, Data) ->
     ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
                     [node(), Data#raft.current_term, leader,
                     {client_request, Req}, handle_client_request]),
-    AEs = make_append_entries([Req], Data),
+
+    {keep_state, NewData, [{next_event, cast, process_buffered_requests}]};
+% Process Buffered Client Requests
+%
+% Replicate the client request, once replicated on quorum of peers, apply to rsm
+% and return the result to client. Notify the peers about commit index too
+leader(cast, process_buffered_requests, Data) ->
+    AEs = make_append_entries(Data),
     LogEntries = convert_ae_to_log_entries(AEs),
     nilva_replication_log:append_entries(LogEntries),
     [LastLogEntry | _] = lists:reverse(LogEntries),
-    NewData2 = NewData#raft{
+    NewData = Data#raft{
+                    client_requests_buffer = [],
                     last_log_idx = LastLogEntry#log_entry.index,
                     last_log_term = LastLogEntry#log_entry.term
-                    },
-    broadcast(get_peers(NewData2), AEs),
-    {keep_state, NewData2, []};
+                },
+    broadcast(get_peers(NewData), AEs),
+    {keep_state, NewData, []};
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
@@ -513,14 +518,14 @@ buffer_client_request(_From, {_CSN, cas, _K, _EV, _NV}, Data) ->
     Data.
 
 
--spec make_append_entries([client_request()], raft_state()) -> append_entries().
-make_append_entries(ClientRequests, Data) ->
+-spec make_append_entries(raft_state()) -> append_entries().
+make_append_entries(Data) ->
     #ae{
         leaders_term    = Data#raft.current_term,
         leader_id       = node(),
         prev_log_idx    = Data#raft.last_log_idx,
         prev_log_term   = Data#raft.last_log_term,
-        entries         = ClientRequests,
+        entries         = Data#raft.client_requests_buffer,
         leaders_commit_idx = Data#raft.commit_idx
     }.
 
