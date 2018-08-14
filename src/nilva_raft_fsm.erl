@@ -463,7 +463,9 @@ leader({call, From}, {client_request, Req}, Data) ->
     %       to handle it on the client side
     %
     % TODO: Broadcast of AEs should happen once we encounter a msg that is
-    %       not a client request.
+    %       not a client request or a timeout has been reached or if the
+    %       number of messages in the buffer has exceeded a specific threshold.
+    %       The threshold & timeout must be user configurable
     % AEs = make_append_entries(Data#raft.client_requests_buffer, Data),
     ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
                     [node(), Data#raft.current_term, leader,
