@@ -128,13 +128,20 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
         NewData = update_term(Data, LT),
         {keep_state, NewData, [{next_event, cast, AE}]};
 % Append Entries request (valid, leader with current term)
-follower(cast, _AE=#ae{leaders_term=LT}, _Data=#raft{current_term=FT})
+follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
     when FT =:= LT ->
         % TODO
         % Check log completeness,
         % If log is complete, append entries to log and ack to leader
         % If log is not complete, reject append entries
-        {keep_state_and_data, []};
+        NewData = append_entries_to_log(AE, Data),
+        RAE = #rae{
+                peers_current_term = FT,
+                peer_id = node(),
+                success = true
+            },
+        cast(AE#ae.leader_id, RAE),
+        {keep_state, NewData, []};
 % Append Entries request (invalid)
 follower(cast, AE=#ae{leaders_term=LT}, #raft{current_term=FT})
     when FT > LT ->
@@ -563,12 +570,19 @@ make_append_entries(Data) ->
 
 
 -spec convert_ae_to_log_entries(append_entries()) -> list(log_entry()).
-convert_ae_to_log_entries(_AE) ->
+convert_ae_to_log_entries(AE) ->
     % Monotonically increase index starting from last_log_index if the term is the
     % same, otherwise add a no-op and increment the index starting from 0.
     %
-    % TODO
-    [].
+    % TODO: Handle more than one log entry
+    LE = #log_entry{
+            term = AE#ae.leaders_term,
+            index = AE#ae.prev_log_idx + 1,
+            status = volatile,
+            entry = hd(AE#ae.entries),
+            response = undefined
+        },
+    [LE].
 
 
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().

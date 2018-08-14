@@ -33,7 +33,8 @@
                         | {csn(), cas, key(), value(), value()}.
 -type response_to_client() :: {csn(), 'ok'}         % for put or delete
                             | {csn(), value()}      % for get
-                            | {csn(), kv_error()}.  % for errors
+                            | {csn(), kv_error()}   % for errors
+                            | undefined.
 
 % Related to the log & log entries
 %
