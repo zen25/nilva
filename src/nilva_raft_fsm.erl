@@ -466,7 +466,6 @@ leader({call, From}, {client_request, Req}, Data) ->
     %       not a client request or a timeout has been reached or if the
     %       number of messages in the buffer has exceeded a specific threshold.
     %       The threshold & timeout must be user configurable
-    % AEs = make_append_entries(Data#raft.client_requests_buffer, Data),
     ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
                     [node(), Data#raft.current_term, leader,
                     {client_request, Req}, handle_client_request]),
@@ -508,26 +507,45 @@ handle_event(_, _, #raft{current_term=T}) ->
 
 
 -spec buffer_client_request(client(), client_request(), raft_state()) -> raft_state().
-% TODO: Buffer requests
-%       As a first pass, implemented only single element append entries
-buffer_client_request(_From, {_CSN, get, _K} , Data) ->
-    Data;
-buffer_client_request(_From, {_CSN, put, _K, _V}, Data) ->
-    Data;
-buffer_client_request(_From, {_CSN, delete, _K}, Data) ->
-    Data;
-buffer_client_request(_From, {_CSN, cas, _K, _EV, _NV}, Data) ->
-    Data.
+buffer_client_request(From, Req = {CSN, _, _} , Data) ->
+    CSN_2_Client = maps:put(CSN, From, Data#raft.csn_2_client),
+    % NOTE: Appending an element to the end of the list is inefficient
+    %       as we would need to traverse the whole list before adding to
+    %       the tail. Hence, we are building the buffer in reverse order
+    %       so that a single reverse gives us the correct requests order.
+    %
+    % NOTE: Order of arrival is important as we intend to provide linearizability
+    Client_requests_buffer = [Req] ++ Data#raft.client_requests_buffer,
+    Data#raft{
+        client_requests_buffer = Client_requests_buffer,
+        csn_2_client = CSN_2_Client
+    };
+buffer_client_request(From, Req = {CSN, _, _, _}, Data) ->
+    CSN_2_Client = maps:put(CSN, From, Data#raft.csn_2_client),
+    Client_requests_buffer = Data#raft.client_requests_buffer ++ [Req],
+    Data#raft{
+        client_requests_buffer = Client_requests_buffer,
+        csn_2_client = CSN_2_Client
+    };
+buffer_client_request(From, Req = {CSN, _, _, _, _}, Data) ->
+    CSN_2_Client = maps:put(CSN, From, Data#raft.csn_2_client),
+    Client_requests_buffer = Data#raft.client_requests_buffer ++ [Req],
+    Data#raft{
+        client_requests_buffer = Client_requests_buffer,
+        csn_2_client = CSN_2_Client
+    }.
 
 
 -spec make_append_entries(raft_state()) -> append_entries().
 make_append_entries(Data) ->
+    % See the note in buffer_client_request/3
+    ClientRequestInOrderOfArrival = lists:reverse(Data#raft.client_requests_buffer),
     #ae{
         leaders_term    = Data#raft.current_term,
         leader_id       = node(),
         prev_log_idx    = Data#raft.last_log_idx,
         prev_log_term   = Data#raft.last_log_term,
-        entries         = Data#raft.client_requests_buffer,
+        entries         = ClientRequestInOrderOfArrival,
         leaders_commit_idx = Data#raft.commit_idx
     }.
 
