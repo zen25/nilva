@@ -59,7 +59,7 @@ get_log_entries(Idx) ->
 erase_log_entries(Idx) ->
     nilva_mnesia:del_log_entries_starting_from(Idx).
 
--spec append_entries(list(log_entry())) -> no_return().
+-spec append_entries(list(log_entry())) -> ok | {error, any()}.
 append_entries([LogEntry]) ->
     nilva_mnesia:write_entry(LogEntry);
 append_entries(LogEntries) ->

@@ -130,20 +130,39 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
 % Append Entries request (valid, leader with current term)
 follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
     when FT =:= LT ->
-        % TODO
-        % Check log completeness,
-        % If log is complete, append entries to log and ack to leader
-        % If log is not complete, reject append entries
         ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), FT, follower, AE, append_entries_to_log]),
-        NewData = append_entries_to_log(AE, Data),
-        RAE = #rae{
-                peers_current_term = FT,
-                peer_id = node(),
-                success = true
-            },
-        cast(AE#ae.leader_id, RAE),
-        {keep_state, NewData, []};
+        case append_entries_to_log(AE, Data) of
+            log_not_up_to_date ->
+                ok = lager:info("Follower's log is always complete"),
+                RAE = #rae{
+                        peers_current_term = FT,
+                        peer_id = node(),
+                        success = false
+                    },
+                cast(AE#ae.leader_id, RAE),
+                {keep_state_and_data, []};
+            failed_to_update_log ->
+                % TODO: This is a peculiar case, we can retry to append entries here
+                %       or stop after throwing the error
+                ok = lager:error("Failed to persist log entries to ~p's log",
+                                 [node()]),
+                RAE = #rae{
+                        peers_current_term = FT,
+                        peer_id = node(),
+                        success = false
+                    },
+                cast(AE#ae.leader_id, RAE),
+                {keep_state_and_data, []};
+            NewData ->
+                RAE = #rae{
+                        peers_current_term = FT,
+                        peer_id = node(),
+                        success = true
+                    },
+                cast(AE#ae.leader_id, RAE),
+                {keep_state, NewData, []}
+        end;
 % Append Entries request (invalid)
 follower(cast, AE=#ae{leaders_term=LT}, #raft{current_term=FT})
     when FT > LT ->
@@ -488,9 +507,17 @@ leader({call, From}, {client_request, Req}, Data) ->
 % and return the result to client. Notify the peers about commit index too
 leader(cast, process_buffered_requests, Data) ->
     AEs = make_append_entries(Data),
-    NewData = append_entries_to_log(AEs, Data),
-    broadcast(get_peers(NewData), AEs),
-    {keep_state, NewData, []};
+    case append_entries_to_log(AEs, Data) of
+        log_not_up_to_date ->
+            ok = lager:error("Leader's log is always complete"),
+            {keep_state_and_data, []};
+        failed_to_update_log ->
+            ok = lager:error("Failed to persist log entries to leader's log"),
+            {keep_state_and_data, []};
+        NewData ->
+            broadcast(get_peers(NewData), AEs),
+            {keep_state, NewData, []}
+    end;
 leader(EventType, EventContent, Data) ->
     % Handle the rest
     handle_event(EventType, EventContent, Data).
@@ -542,21 +569,34 @@ buffer_client_request(From, Req = {CSN, _, _, _, _}, Data) ->
 
 
 -spec append_entries_to_log(append_entries(), raft_state()) ->
-    raft_state() | failed_to_update_log.
+    raft_state()
+    | log_not_up_to_date
+    | failed_to_update_log.
 append_entries_to_log(AE, Data) ->
-    % TODO: Check log completion as it is required for the followers
-    % NOTE: Leader's log is the single source of truth. It is
-    %       by definition complete. Hence, log completion should
-    %       always return true for the leader
-    LogEntries = convert_ae_to_log_entries(AE),
-    nilva_replication_log:append_entries(LogEntries),
-    [LastLogEntry | _] = lists:reverse(LogEntries),
-    NewData = Data#raft{
-                    client_requests_buffer = [],
-                    last_log_idx = LastLogEntry#log_entry.index,
-                    last_log_term = LastLogEntry#log_entry.term
-                },
-    NewData.
+    case nilva_replication_log:check_log_completeness(AE, Data) of
+        false ->
+            % NOTE: Leader's log is the single source of truth. It is
+            %       by definition complete. Hence, log completion should
+            %       always return true for the leader
+            log_not_up_to_date;
+        true ->
+            LogEntries = convert_ae_to_log_entries(AE),
+            % TODO: Handle aborted append_entries
+            case nilva_replication_log:append_entries(LogEntries) of
+                ok ->
+                    [LastLogEntry | _] = lists:reverse(LogEntries),
+                    NewData = Data#raft{
+                                    client_requests_buffer = [],
+                                    last_log_idx = LastLogEntry#log_entry.index,
+                                    last_log_term = LastLogEntry#log_entry.term
+                                },
+                    NewData;
+                {error, Error} ->
+                    ok = lager:error("Unable to persist log entrie"),
+                    ok = lager:error(Error),
+                    failed_to_update_log
+            end
+    end.
 
 
 -spec make_append_entries(raft_state()) -> append_entries().
