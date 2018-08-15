@@ -581,7 +581,6 @@ append_entries_to_log(AE, Data) ->
             log_not_up_to_date;
         true ->
             LogEntries = convert_ae_to_log_entries(AE),
-            % TODO: Handle aborted append_entries
             case nilva_replication_log:append_entries(LogEntries) of
                 ok ->
                     [LastLogEntry | _] = lists:reverse(LogEntries),
