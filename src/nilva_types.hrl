@@ -12,7 +12,7 @@
 -type raft_peer_id() :: node().     % This is the node name.
                                     % Note that we are sending the msgs to a locally
                                     % registered process on various nodes
--type raft_commands() :: 'reload_config' | 'no_op'.
+-type raft_cluster_commands() :: 'reload_config' | 'no_op'.
 
 % Related to client requests to RSM
 %
@@ -31,6 +31,9 @@
                         | {csn(), put, key(), value()}
                         | {csn(), delete, key()}
                         | {csn(), cas, key(), value(), value()}.
+-type raft_commands() :: raft_cluster_commands()
+                       | client_request().
+
 -type response_to_client() :: {csn(), 'ok'}         % for put or delete
                             | {csn(), value()}      % for get
                             | {csn(), kv_error()}   % for errors

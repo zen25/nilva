@@ -3,17 +3,21 @@
 
 -include("nilva_types.hrl").
 -export([init/0]).
+% For debugging
+% -export([create_tables/0, init_tables/0]).
 -export([get_current_term/0, increment_current_term/0, set_current_term/1]).
 -export([get_voted_for/0, set_voted_for/1]).
--export([get_log_entry/2,
-         get_log_entries_starting_from/2,
-         del_log_entries_starting_from/2,
+-export([get_log_entry/1,
+         get_log_entries_starting_from/1,
+         del_log_entries_starting_from/1,
          write_entry/1,
          write_entries/1
          ]).
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
+-define(FIRST_TERM, 0).
+-define(FIRST_LOG_IDX, 0).
 -define(TXN_OK, {atomic, ok}).     % Transaction ok
 
 % NOTE: Supresses unused record dialyzer warnings that you know are not true
@@ -25,15 +29,25 @@
 %% Mnesia Tables
 %% =========================================================================
 
-% NOTE: First 2 are required for implementing raft, next 2 make testing and
+% NOTE: First 2 are required for implementing raft, rest of them make testing and
 % implementation easier
 %
 % NOTE: The structure of records is specific to mnesia. If you decide to use a different
 %       storage engine in the future, you would need to make appropriate changes
 %       to support the new storage engine's idiosyncrasies.
+%
+% TODO: This is almost the same record from nilva_types.hrl.
+%       Use that instead of declaring it again
 -record(nilva_log_entry, {
-        % Primary key
-        pk      :: {raft_term(), raft_log_idx()},
+        % Index is monotonically increasing starting from '0'
+        index   :: raft_log_idx(),
+        term    :: raft_term(),
+        % csn must be unique too. We can think of it as uuid.
+        % % Practically, collisions should not be possible
+        % csn     :: undefined | csn(),
+        %
+        % csn is already part of raft_command if it is a client request.
+        % Should we store it again to make indexing easier?
         cmd     :: raft_commands(),
         res     :: rsm_response()
         }).
@@ -65,8 +79,21 @@
 % We assume mnesia schema has already been setup either manually or by setup script
 % TODO: Automate the schema creation if not present
 init() ->
-    create_tables(),
-    init_tables().
+    case create_tables() of
+        ok ->
+            case init_tables() of
+                ok ->
+                    true;
+                _Error1 ->
+                    % ok = lager:error("Mnesia tables not initialized properly: ~n~p",
+                    %                  [Error1]),
+                    false
+            end;
+        _Error2 ->
+            % ok = lager:error("Mnesia tables not created properly: ~n~p",
+            %                  [Error2]),
+            false
+    end.
 
 
 %% =========================================================================
@@ -152,10 +179,12 @@ set_voted_for(Peer) ->
 %
 % Overwrites the entry if it already exists.
 % Raft has the mechanism to handle this case
+% Raft is also responsible for making sure that there are no holes in
+% log indexes sequence
 -spec write_entry(log_entry()) -> ok | {error, any()}.
 write_entry(#log_entry{term=Term, index=Idx, entry=LE}) ->
     F = fun() ->
-            mnesia:write({nilva_log_entry, {Term, Idx}, LE, undefined})
+            mnesia:write({nilva_log_entry, Idx, Term, LE, undefined})
         end,
     txn_run(F).
 
@@ -163,15 +192,15 @@ write_entry(#log_entry{term=Term, index=Idx, entry=LE}) ->
 -spec write_entries(list(log_entry())) -> ok | {error, any()}.
 write_entries(LogEntries) ->
     F = fun() ->
-            [mnesia:write({nilva_log_entry, {Term, Idx}, LE, undefined}) ||
+            [mnesia:write({nilva_log_entry, Idx, Term, LE, undefined}) ||
             #log_entry{term=Term, index=Idx, entry=LE} <- LogEntries]
         end,
     txn_run(F).
 
 
-get_log_entry(Term, Idx) ->
+get_log_entry(Idx) ->
     F = fun() ->
-            Xs = mnesia:read(nilva_log_entry, {Term, Idx}),
+            Xs = mnesia:read(nilva_log_entry, Idx),
             case Xs of
                 [] -> mnesia:abort("No such log entry");
                 [X] -> X
@@ -182,54 +211,59 @@ get_log_entry(Term, Idx) ->
 
 
 % Inclusive Range
-get_log_entries_starting_from(Term, Idx) ->
+get_log_entries_starting_from(Idx) ->
     Query = fun() ->
                 Q =  qlc:q([X ||
                            X <- mnesia:table(nilva_log_entry),
-                           is_log_entry_after_given_entry(X, Term, Idx)]),
+                           Idx =< X#nilva_log_entry.index]),
                 qlc:e(Q)
             end,
     LES = txn_run_and_get_result(Query),
     lists:map(fun convert_to_log_entry/1, LES).
 
 
-del_log_entries_starting_from(Term, Idx) ->
+del_log_entries_starting_from(Idx) ->
     Query = fun() ->
-                Q =  qlc:q([mnesia:delete({nilva_log_entry, X#nilva_log_entry.pk }) ||
+                Q =  qlc:q([mnesia:delete({nilva_log_entry, X#nilva_log_entry.index }) ||
                            X <- mnesia:table(nilva_log_entry),
-                           is_log_entry_after_given_entry(X, Term, Idx)]),
+                           Idx =< X#nilva_log_entry.index]),
                 qlc:e(Q)
             end,
     txn_run(Query).
 
-
-%Private
--spec is_log_entry_after_given_entry(nilva_log_entry(), raft_term(), raft_log_idx()) ->
-    boolean().
-is_log_entry_after_given_entry(#nilva_log_entry{pk={T, I}}, Term, Idx) ->
-    (Term =< T) and (Idx =< I).
 
 
 %% =========================================================================
 %% helpers (private)
 %% =========================================================================
 
--spec create_tables() -> boolean().
+-spec create_tables() -> ok | {error, any()}.
 create_tables() ->
     % Hmm, it would be nice to have a monad like 'Either' here to handle
     % the `aborted` case
     %
     % NOTE: All the tables will be local to the node. They won't be replicated by Mnesia.
     %       Raft is responsible for replication
-    Tbls = [nilva_persistent_state, nilva_log_entry, nilva_state_transition],
+    % NOTE: record_info is resolved at compile time, so it cannot be passed arguments
+    %       as a function
+    % TODO: You can test the tables creation by running `mnesia:table_info(Tbl, attributes)`
+    %       and checking that the attributes match what you expected
+    Tbls = [{nilva_persistent_state, record_info(fields, nilva_persistent_state)},
+            {nilva_log_entry, record_info(fields, nilva_log_entry)},
+            {nilva_state_transition, record_info(fields, nilva_state_transition)}
+            ],
     Results = lists:map(fun create_table_if_not_exists/1, Tbls),
-    lists:all(fun(X) -> X == ok end, Results).
+    case lists:all(fun(X) -> X =:= ok end, Results) of
+        true -> ok;
+        false ->
+            {error, lists:filter(fun(X) -> X =/= ok end, Results)}
+    end.
 
 
--spec create_table_if_not_exists(atom()) -> ok | {error, any()}.
-create_table_if_not_exists(TblName) ->
+-spec create_table_if_not_exists({atom(), list(atom())}) -> ok | {error, any()}.
+create_table_if_not_exists({TblName, Attributes}) ->
     Res = mnesia:create_table(TblName,
-                              [{attributes, record_info(fields, nilva_log_entry)},
+                              [{attributes, Attributes},
                               {disc_copies, [node()]}]),
     case Res of
         ?TXN_OK -> ok;
@@ -240,9 +274,8 @@ create_table_if_not_exists(TblName) ->
 
 init_tables() ->
     F = fun() ->
-            FirstValidTerm = 1,
             mnesia:write({nilva_persistent_state,
-                         ?PERSISTENT_STATE_KEY, FirstValidTerm, undefined})
+                         ?PERSISTENT_STATE_KEY, ?FIRST_TERM, undefined})
             % mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
         end,
     txn_run(F).
@@ -267,8 +300,7 @@ txn_run(F) ->
 
 
 -spec convert_to_log_entry(nilva_log_entry()) -> log_entry().
-convert_to_log_entry(#nilva_log_entry{pk=Pk, cmd=Cmd, res=Res}) ->
-    {Term, Idx} = Pk,
+convert_to_log_entry(#nilva_log_entry{index=Idx, term=Term, cmd=Cmd, res=Res}) ->
     #log_entry{
         term = Term,
         index = Idx,

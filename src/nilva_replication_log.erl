@@ -9,9 +9,9 @@
          voted_for/0,
          vote/1
          ]).
--export([get_log_entry/2,
-         get_log_entries/2,
-         erase_log_entries/2,
+-export([get_log_entry/1,
+         get_log_entries/1,
+         erase_log_entries/1,
          append_entries/1,
          check_log_completeness/1
          ]).
@@ -45,19 +45,19 @@ check_log_completeness(_LogEntry) ->
     %       in current log
     false.
 
--spec get_log_entry(raft_term(), raft_log_idx()) -> log_entry().
-get_log_entry(Term, Idx) ->
-    nilva_mnesia:get_log_entry(Term, Idx).
+-spec get_log_entry(raft_log_idx()) -> log_entry().
+get_log_entry(Idx) ->
+    nilva_mnesia:get_log_entry(Idx).
 
--spec get_log_entries(raft_term(), raft_log_idx()) -> list(log_entry()).
+-spec get_log_entries(raft_log_idx()) -> list(log_entry()).
 % Returns log entries starting from given term & idx
 % Useful for when the leader needs to overwrite it's peer's log
-get_log_entries(Term, Idx) ->
-    nilva_mnesia:get_log_entries_starting_from(Term, Idx).
+get_log_entries(Idx) ->
+    nilva_mnesia:get_log_entries_starting_from(Idx).
 
--spec erase_log_entries(raft_term(), raft_log_idx()) -> no_return().
-erase_log_entries(Term, Idx) ->
-    nilva_mnesia:del_log_entries_starting_from(Term, Idx).
+-spec erase_log_entries(raft_log_idx()) -> no_return().
+erase_log_entries(Idx) ->
+    nilva_mnesia:del_log_entries_starting_from(Idx).
 
 -spec append_entries(list(log_entry())) -> no_return().
 append_entries([LogEntry]) ->
