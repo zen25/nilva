@@ -134,7 +134,7 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
                         [node(), FT, follower, AE, append_entries_to_log]),
         case append_entries_to_log(AE, Data) of
             log_not_up_to_date ->
-                ok = lager:info("Follower's log is always complete"),
+                ok = lager:info("Follower's log is NOT complete"),
                 RAE = #rae{
                         peers_current_term = FT,
                         peer_id = node(),
