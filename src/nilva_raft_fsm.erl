@@ -509,8 +509,9 @@ leader(cast, process_buffered_requests, Data) ->
     AEs = make_append_entries(Data),
     case append_entries_to_log(AEs, Data) of
         log_not_up_to_date ->
-            ok = lager:error("Leader's log is always complete"),
-            {keep_state_and_data, []};
+            Error = "Leader's log is always complete",
+            ok = lager:error(Error),
+            {stop, {error, Error}};
         failed_to_update_log ->
             ok = lager:error("Failed to persist log entries to leader's log"),
             {keep_state_and_data, []};
