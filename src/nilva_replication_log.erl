@@ -12,9 +12,9 @@
 -export([get_log_entry/1,
          get_log_entries/1,
          erase_log_entries/1,
-         append_entries/1,
-         check_log_completeness/1
+         append_entries/1
          ]).
+-export([check_log_completeness/2]).
 -export([init/0]).
 
 
@@ -39,11 +39,11 @@ vote(Peer) ->
     nilva_mnesia:set_voted_for(Peer).
 
 
--spec check_log_completeness(log_entry()) -> boolean().
-check_log_completeness(_LogEntry) ->
-    % TODO: Get term & idx from log entry & see if the command matches the entry in
-    %       in current log
-    false.
+-spec check_log_completeness(append_entries(), raft_state()) -> boolean().
+check_log_completeness(AE, State) ->
+    (AE#ae.prev_log_idx == State#raft.last_log_idx)
+    and (AE#ae.prev_log_term == State#raft.last_log_term).
+
 
 -spec get_log_entry(raft_log_idx()) -> log_entry().
 get_log_entry(Idx) ->
