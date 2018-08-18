@@ -207,7 +207,12 @@ get_log_entry(Idx) ->
             end
         end,
     LE = txn_run_and_get_result(F),
-    convert_to_log_entry(LE).
+    case LE of
+        {aborted, Error} ->
+            {error, Error};
+        _ ->
+            convert_to_log_entry(LE)
+    end.
 
 
 % Inclusive Range

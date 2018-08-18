@@ -40,12 +40,28 @@ vote(Peer) ->
 
 
 -spec check_log_completeness(append_entries(), raft_state()) -> boolean().
-check_log_completeness(AE, State) ->
-    (AE#ae.prev_log_idx == State#raft.last_log_idx)
-    and (AE#ae.prev_log_term == State#raft.last_log_term).
+check_log_completeness(AE=#ae{prev_log_idx=LIdx}, State=#raft{last_log_idx=FIdx})
+    when LIdx == FIdx ->
+        % Follower is supposed to be up to date with the leader
+        AE#ae.prev_log_term == State#raft.last_log_term;
+check_log_completeness(_AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
+    when LIdx > FIdx ->
+        % Follower is not up to date with the leader
+        false;
+check_log_completeness(AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
+    when LIdx < FIdx ->
+        LE = get_log_entry(LIdx),
+        case LE of
+            {error, _Error} ->
+                % NOTE: Should not be possible.
+                %       There should not be holes in the log
+                false;
+            _ ->
+                LE#log_entry.term == AE#ae.prev_log_term
+        end.
 
 
--spec get_log_entry(raft_log_idx()) -> log_entry().
+-spec get_log_entry(raft_log_idx()) -> log_entry() | {error, any()}.
 get_log_entry(Idx) ->
     nilva_mnesia:get_log_entry(Idx).
 
