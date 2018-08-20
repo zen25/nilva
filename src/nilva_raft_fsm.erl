@@ -106,6 +106,7 @@ follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_te
                             [node(), FT, follower, AE, reset_election_timer]),
         RAE = #rae{peers_current_term = FT,
                    peer_id = node(),
+                   peers_last_log_idx = Data#raft.last_log_idx,
                    success = true
                    },
         cast(AE#ae.leader_id, RAE),
@@ -118,6 +119,7 @@ follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_te
         NewData = update_term(Data, LT),
         RAE = #rae{peers_current_term = NewData#raft.current_term,
                    peer_id = node(),
+                   peers_last_log_idx = NewData#raft.last_log_idx,
                    success = true
                    },
         cast(AE#ae.leader_id, RAE),
@@ -132,12 +134,14 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
     when FT =:= LT ->
         ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
                         [node(), FT, follower, AE, append_entries_to_log]),
+        % TODO: Refactor this into a separate function
         case append_entries_to_log(AE, Data) of
             log_not_up_to_date ->
                 ok = lager:info("Follower's log is NOT complete"),
                 RAE = #rae{
                         peers_current_term = FT,
                         peer_id = node(),
+                        peers_last_log_idx = Data#raft.last_log_idx,
                         success = false
                     },
                 cast(AE#ae.leader_id, RAE),
@@ -150,6 +154,7 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
                 RAE = #rae{
                         peers_current_term = FT,
                         peer_id = node(),
+                        peers_last_log_idx = Data#raft.last_log_idx,
                         success = false
                     },
                 cast(AE#ae.leader_id, RAE),
@@ -158,19 +163,21 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
                 RAE = #rae{
                         peers_current_term = FT,
                         peer_id = node(),
+                        peers_last_log_idx = NewData#raft.last_log_idx,
                         success = true
                     },
                 cast(AE#ae.leader_id, RAE),
                 {keep_state, NewData, []}
         end;
 % Append Entries request (invalid)
-follower(cast, AE=#ae{leaders_term=LT}, #raft{current_term=FT})
+follower(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=FT})
     when FT > LT ->
         % Stale leader, reject the append entries
         _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                             [node(), FT, follower, AE, reject_ae]),
         RAE = #rae{peers_current_term = FT,
                    peer_id = node(),
+                   peers_last_log_idx = Data#raft.last_log_idx,
                    success = false
                    },
         cast(AE#ae.leader_id, RAE),
@@ -284,13 +291,14 @@ candidate(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
         ProcessEventAsFollower = {next_event, cast, AE},
         {next_state, follower, NewData, [ProcessEventAsFollower]};
 % Append Entries request (invalid)
-candidate(cast, AE=#ae{leaders_term=LT}, #raft{current_term=CT})
+candidate(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
     when CT > LT ->
         % Stale leader, reject the append entries
         _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                             [node(), CT, candidate, AE, reject_ae]),
         RAE = #rae{peers_current_term = CT,
                    peer_id = node(),
+                   peers_last_log_idx = Data#raft.last_log_idx,
                    success = false
                    },
         cast(AE#ae.leader_id, RAE),
@@ -378,6 +386,7 @@ leader(enter, candidate, Data) ->
     % stop the election timer and restart the heartbeat timer
     % Turn off the heart beat timer & start the election timer
     % The next event processed must be post-poned event
+    % TODO: Reinitialize nextIndex & matchIndex
     NewData = Data#raft{votes_received = [], votes_rejected = []},
     _Ignore = lager:debug("{node:~p} {event:~p} {term:~p}",
                          [node(), starting_term_as_leader, Data#raft.current_term]),
@@ -412,13 +421,14 @@ leader(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
         ProcessEventAsFollower = {next_event, cast, AE},
         {next_state, follower, NewData, [ProcessEventAsFollower]};
 % Append Entries request (invalid)
-leader(cast, AE=#ae{leaders_term=LT}, #raft{current_term=CT})
+leader(cast, AE=#ae{leaders_term=LT}, Data = #raft{current_term=CT})
     when CT > LT ->
         % Stale leader, reject the append entries
         _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                             [node(), CT, leader, AE, reject_ae]),
         RAE = #rae{peers_current_term = CT,
                    peer_id = node(),
+                   peers_last_log_idx = Data#raft.last_log_idx,
                    success = false
                    },
         cast(AE#ae.leader_id, RAE),
@@ -463,12 +473,13 @@ leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
                             RAE, ignore]),
         {keep_state_and_data, []};
 % Append Entries Reply (valid, current term)
-leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
+leader(cast, RAE = #rae{peers_current_term = PTerm}, Data = #raft{current_term = Term})
     when PTerm =:= Term ->
         % TODO: Handle other things that are not no_op
         ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
-                        [node(), Term, leader, RAE, handle_reply_ae]),
-        {keep_state_and_data, []};
+                        [node(), Term, leader, RAE, handle_reply_to_ae]),
+        NewData = handle_reply_to_ae(RAE, Data),
+        {keep_state, NewData, []};
 % Impossible message
 leader(cast, #rae{peers_current_term = PTerm}, #raft{current_term = Term})
     when PTerm > Term ->
@@ -480,7 +491,6 @@ leader({call, From}, {client_request, Req}, Data) ->
     % NOTE: gen_statem does not have selective recieve. You can simulate
     %       it by postponing the events that you are not interested in and
     %       and using a buffer to store the interesting events.
-    % TODO: Collect multiple client requests and handle them together
     NewData = buffer_client_request(From, Req, Data),
     % NOTE: The reply should happen after the rsm command has been applied
     %       For that to happen, we cannot block here.
@@ -600,8 +610,10 @@ append_entries_to_log(AE, Data) ->
 
 
 -spec make_append_entries(raft_state()) -> append_entries().
+% TODO: Some followers might be stale, we need to send other
+%       log entries that are not part of current buffered client requests
 make_append_entries(Data) ->
-    % See the note in buffer_client_request/3
+    % See the note in buffer_client_request/3 w.r.t reverse
     ClientRequestInOrderOfArrival = lists:reverse(Data#raft.client_requests_buffer),
     #ae{
         leaders_term    = Data#raft.current_term,
@@ -627,6 +639,64 @@ convert_ae_to_log_entries(AE) ->
             response = undefined
         },
     [LE].
+
+
+-spec handle_reply_to_ae(reply_append_entries(), raft_state()) -> raft_state().
+handle_reply_to_ae(RAE = #rae{success=true, peer_id=Peer}, Data) ->
+    % Update the nextIndex & matchIndex after checking if we got a duplicate
+    % or stale message
+    MatchIdx = proplists:get_value(Peer, Data#raft.match_idx),
+    Res = case MatchIdx >= RAE#rae.peers_last_log_idx of
+        true ->
+            % We can ignore this message
+            % Either we already processed a duplicate of this message
+            % or assumed log completeness as we received success for a
+            % last_log_idx higher than this msg's
+            Data;
+        false ->
+            MatchIndices = proplists:delete(Peer, Data#raft.match_idx),
+            NextIndices = proplists:delete(Peer, Data#raft.next_idx),
+            Data#raft{
+                next_idx = NextIndices ++ [{Peer, RAE#rae.peers_last_log_idx + 1}],
+                match_idx = MatchIndices ++ [{Peer, RAE#rae.peers_last_log_idx}]
+            }
+    end,
+    NewRes = check_and_commit_log_entries(Res),
+    NewRes;
+handle_reply_to_ae(RAE = #rae{success=false, peer_id=Peer}, Data) ->
+    % Update the nextIndex & matchIndex after checking if we got a duplicate
+    % or stale message
+    MatchIdx = proplists:get_value(Peer, Data#raft.match_idx),
+    Res = case MatchIdx >= RAE#rae.peers_last_log_idx of
+        true ->
+            % We can ignore this message
+            % Either we already processed a duplicate of this message
+            % or assumed log completeness as we received success for a
+            % last_log_idx higher than this msg's
+            Data;
+        false ->
+            NextIndices = proplists:delete(Peer, Data#raft.next_idx),
+            Data#raft{
+                next_idx = NextIndices ++ [{Peer, max(RAE#rae.peers_last_log_idx - 1, 0)}]
+            }
+    end,
+    NewRes = resend_append_entries_if_necessary(Res),
+    NewRes.
+
+
+-spec check_and_commit_log_entries(raft_state()) -> raft_state().
+check_and_commit_log_entries(Data) ->
+    % TODO
+    % See if there any outstanding log entries for which a quorum has been reached,
+    % commit them, apply to rsm, reply to client & send commit_idx to all peers
+    Data.
+
+
+-spec resend_append_entries_if_necessary(raft_state()) -> raft_state().
+resend_append_entries_if_necessary(Data) ->
+    % TODO
+    % Send append entries to any lagging peers
+    Data.
 
 
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().

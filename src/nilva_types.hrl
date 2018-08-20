@@ -158,7 +158,11 @@
 % Append Entries Reply
 -record(rae, {
         peers_current_term      :: raft_term(),
+        % peer_id & peers_last_log_idx indicate the log state to the
+        % leader so that it can update the next_index[] & match_index[]
+        % appropriately
         peer_id                 :: raft_peer_id(),
+        peers_last_log_idx      :: raft_log_idx(),
         success                 :: boolean()
         }).
 -type reply_append_entries() :: #rae{}.

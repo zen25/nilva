@@ -163,6 +163,7 @@ send_heart_beats(R = #raft{current_term=Term}) ->
     AE.
 
 
+% TODO: Actually check the log completeness
 -spec is_log_up_to_date(request_votes()) -> boolean().
 is_log_up_to_date(#rv{candidate_id=CandidateId})
     when CandidateId =:= true  ->
