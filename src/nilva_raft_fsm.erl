@@ -743,9 +743,44 @@ ready_to_commit(Term, N, MatchIndices, NQuorum) ->
 
 -spec apply_to_RSM(raft_log_idx(), raft_log_idx(), map()) ->
     {list(response_to_client()), kv_store()}.
-apply_to_RSM(_StartingIdx, _EndingIdx, KVStore) ->
-    % TODO
-    {[], KVStore}.
+apply_to_RSM(StartingIdx, EndingIdx, KVStore) ->
+    LogEntries = lists:map(fun nilva_replication_log:get_log_entry/1,
+                           lists:seq(StartingIdx, EndingIdx)),
+    {FinalKVStore, Responses} = lists:foldl(
+                                    fun apply_log_entry/2,
+                                    {KVStore, []},
+                                    LogEntries),
+    {Responses, FinalKVStore}.
+
+
+-spec apply_log_entry(log_entry(), {kv_store(), list(response_to_client())}) ->
+    {kv_store(), list(response_to_client())}.
+apply_log_entry(LE, {KVStore, Responses}) ->
+    % TODO: We need to update the replication log with response so that
+    %       we can serve idempotent client requests in the future
+    case LE#log_entry.entry of
+        {CSN, get, K} ->
+            case maps:find(K, KVStore) of
+                {ok, V} ->
+                    {KVStore, Responses ++ [{CSN, V}]};
+                error ->
+                    {KVStore, Responses ++ [{CSN, {error, "No such key"}}]}
+            end;
+        {CSN, put, K, V} ->
+            NewKVStore = maps:put(K, V, KVStore),
+            {NewKVStore, Responses ++ [{CSN, ok}]};
+        {CSN, delete, K} ->
+            NewKVStore = maps:remove(K, KVStore),
+            {NewKVStore, Responses ++ [{CSN, ok}]};
+        no_op ->
+            {KVStore, Responses};
+        % reload_config ->
+        %     % TODO: Support on the fly configuration changes in the future
+        %     {KVStore, Responses};
+        Unknown ->
+            ok = lager:error("Unknown RSM command: ~p, ignoring.", [Unknown]),
+            {KVStore, Responses}
+    end.
 
 
 -spec resend_append_entries_if_necessary(raft_state()) -> raft_state().
