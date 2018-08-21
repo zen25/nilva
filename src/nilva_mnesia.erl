@@ -208,7 +208,7 @@ get_log_entry(Idx) ->
         end,
     LE = txn_run_and_get_result(F),
     case LE of
-        {aborted, Error} ->
+        {error, Error} ->
             {error, Error};
         _ ->
             convert_to_log_entry(LE)
