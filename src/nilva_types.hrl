@@ -41,7 +41,7 @@
 
 % Related to the log & log entries
 %
--type entry() :: client_request() | raft_commands().
+-type entry() :: raft_commands().
 -type status() :: volatile | durable | committed | applied.
 -type rsm_response() :: 'undefined' | string().
 
