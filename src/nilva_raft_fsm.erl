@@ -693,11 +693,13 @@ check_and_commit_log_entries(Data) ->
     %       get the results and send response to clients
     %       using csn_2_client table
     Responses = apply_to_RSM(Data#raft.commit_idx + 1, NewCommitIdx, Data#raft.kv_store),
-    % Send responses to appropriate clients
-    % TODO: We need a fold to keep track of csn_2_client dict accumulator
-    lists:map(fun(R) -> reply_to_client(R, Data#raft.csn_2_client) end,
-              Responses),
-    Data#raft{commit_idx=NewCommitIdx}.
+    % Send responses to appropriate clients while updating csn_2_client
+    P = fun(R, CSN_2_Client) ->
+        New_CSN_2_Client = reply_to_client(R, CSN_2_Client),
+        New_CSN_2_Client
+    end,
+    Final_CSN_2_Client = lists:foldl(P, Data#raft.csn_2_client, Responses),
+    Data#raft{commit_idx=NewCommitIdx, csn_2_client=Final_CSN_2_Client}.
 
 
 -spec get_new_commit_index(raft_state()) -> raft_log_idx().
@@ -747,6 +749,8 @@ resend_append_entries_if_necessary(Data) ->
 
 
 -spec reply_to_client(response_to_client(), map()) -> map().
+% Send response to the client based on csn & then remove the corresponding
+% entry from csn_2_client map
 reply_to_client(Response = {CSN, _}, CSN_2_Client) ->
     {ok, Client} = maps:find(CSN, CSN_2_Client),
     Client ! Response,
