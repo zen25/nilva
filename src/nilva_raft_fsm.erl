@@ -689,21 +689,27 @@ check_and_commit_log_entries(Data) ->
     % See if there any outstanding log entries for which a quorum has been reached,
     % commit them, apply to rsm, reply to client & send commit_idx to all peers
     NewCommitIdx = get_new_commit_index(Data),
-    % TODO: Apply log entries in [commit_idx + 1, N] to RSM
-    %       get the results and send response to clients
-    %       using csn_2_client table
-    {Responses, KVStore} = apply_to_RSM(Data#raft.commit_idx + 1,
-                                        NewCommitIdx, Data#raft.kv_store),
-    % Send responses to appropriate clients while updating csn_2_client
-    P = fun(R, CSN_2_Client) ->
-        New_CSN_2_Client = reply_to_client(R, CSN_2_Client),
-        New_CSN_2_Client
-    end,
-    Final_CSN_2_Client = lists:foldl(P, Data#raft.csn_2_client, Responses),
-    Data#raft{
-        commit_idx=NewCommitIdx,
-        csn_2_client=Final_CSN_2_Client,
-        kv_store=KVStore}.
+    case NewCommitIdx > Data#raft.commit_idx of
+        false ->
+            % Nothing to do, we have already committed all the possible log entries
+            Data;
+        true ->
+            % Apply log entries in [commit_idx + 1, N] to RSM
+            % get the results and send response to clients
+            % using csn_2_client table
+            {Responses, KVStore} = apply_to_RSM(Data#raft.commit_idx + 1,
+                                                NewCommitIdx, Data#raft.kv_store),
+            % Send responses to appropriate clients while updating csn_2_client
+            P = fun(R, CSN_2_Client) ->
+                New_CSN_2_Client = reply_to_client(R, CSN_2_Client),
+                New_CSN_2_Client
+            end,
+            Final_CSN_2_Client = lists:foldl(P, Data#raft.csn_2_client, Responses),
+            Data#raft{
+                commit_idx=NewCommitIdx,
+                csn_2_client=Final_CSN_2_Client,
+                kv_store=KVStore}
+    end.
 
 
 -spec get_new_commit_index(raft_state()) -> raft_log_idx().
