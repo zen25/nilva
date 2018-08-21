@@ -759,6 +759,7 @@ apply_to_RSM(StartingIdx, EndingIdx, KVStore) ->
     {Responses, FinalKVStore}.
 
 
+% TODO: We just need the commands here, no need for log_entry(). Refactor
 -spec apply_log_entry(log_entry(), {kv_store(), list(response_to_client())}) ->
     {kv_store(), list(response_to_client())}.
 apply_log_entry(LE, {KVStore, Responses}) ->
