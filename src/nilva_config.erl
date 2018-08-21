@@ -2,7 +2,9 @@
 %
 -module(nilva_config).
 
--export([read_config/1]).
+-export([read_config/1,
+        num_required_for_quorum/1
+        ]).
 % TODO: Split the header file. Having a single header seems like a bad idea
 -include("nilva_types.hrl").
 
@@ -17,6 +19,14 @@ read_config(FileName) ->
             end;
         {error, Error} -> {error, Error}
     end.
+
+
+-spec num_required_for_quorum(raft_state()) -> pos_integer().
+num_required_for_quorum(#raft{config=Config}) ->
+    Peers = Config#raft_config.peers,
+    ceil(length(Peers)/2).
+
+
 
 % private
 -spec convertToConfigRecord(list(proplists:property())) ->

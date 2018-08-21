@@ -686,17 +686,71 @@ handle_reply_to_ae(RAE = #rae{success=false, peer_id=Peer}, Data) ->
 
 -spec check_and_commit_log_entries(raft_state()) -> raft_state().
 check_and_commit_log_entries(Data) ->
-    % TODO
     % See if there any outstanding log entries for which a quorum has been reached,
     % commit them, apply to rsm, reply to client & send commit_idx to all peers
-    Data.
+    NewCommitIdx = get_new_commit_index(Data),
+    % TODO: Apply log entries in [commit_idx + 1, N] to RSM
+    %       get the results and send response to clients
+    %       using csn_2_client table
+    Responses = apply_to_RSM(Data#raft.commit_idx + 1, NewCommitIdx, Data#raft.kv_store),
+    % Send responses to appropriate clients
+    % TODO: We need a fold to keep track of csn_2_client dict accumulator
+    lists:map(fun(R) -> reply_to_client(R, Data#raft.csn_2_client) end,
+              Responses),
+    Data#raft{commit_idx=NewCommitIdx}.
+
+
+-spec get_new_commit_index(raft_state()) -> raft_log_idx().
+get_new_commit_index(Data = #raft{
+                         current_term=Term,
+                         commit_idx=CommitIdx,
+                         match_idx=MatchIndices})
+->
+    NQuorum = nilva_config:num_required_for_quorum(Data),
+    NewCommitIdx = get_new_commit_index_loop(Term, CommitIdx + 1, MatchIndices, NQuorum),
+    NewCommitIdx.
+
+
+get_new_commit_index_loop(Term, N, MatchIndices, NQuorum) ->
+    case ready_to_commit(Term, N, MatchIndices, NQuorum) of
+        true ->
+            get_new_commit_index_loop(Term, N + 1, MatchIndices, NQuorum);
+        false ->
+            N - 1
+    end.
+
+
+ready_to_commit(Term, N, MatchIndices, NQuorum) ->
+    case nilva_replication_log:get_log_entry(N) of
+        {error, _} ->
+            false;
+        LE ->
+            LETerm = LE#log_entry.term,
+            Xs = lists:filter(
+                    fun({_Peer, MIdx}) ->
+                        (MIdx >= N) and (Term == LETerm)
+                    end,
+                    MatchIndices),
+            NQuorum =< length(Xs)
+    end.
+
+
+-spec apply_to_RSM(raft_log_idx(), raft_log_idx(), map()) -> list(response_to_client()).
+apply_to_RSM(_StartingIdx, _EndingIdx, _KVStore) ->
+    % TODO
+    [].
 
 
 -spec resend_append_entries_if_necessary(raft_state()) -> raft_state().
 resend_append_entries_if_necessary(Data) ->
-    % TODO
-    % Send append entries to any lagging peers
     Data.
+
+
+-spec reply_to_client(response_to_client(), map()) -> map().
+reply_to_client(Response = {CSN, _}, CSN_2_Client) ->
+    {ok, Client} = maps:find(CSN, CSN_2_Client),
+    Client ! Response,
+    maps:remove(CSN, CSN_2_Client).
 
 
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().
