@@ -107,7 +107,7 @@ is_viable_leader(Data = #raft{current_term=CurrentTerm}, RV = #rv{candidates_ter
     if
         Term < CurrentTerm -> {false, deny_vote_stale_term};
         Term > CurrentTerm ->
-            case is_log_up_to_date(RV) of
+            case is_log_up_to_date(RV#rv.last_log_idx, RV#rv.last_log_term) of
                 true -> {true, cast_vote};
                 false -> {false, deny_vote_log_not_up_to_date}
             end;
@@ -163,17 +163,14 @@ send_heart_beats(R = #raft{current_term=Term}) ->
     AE.
 
 
-% TODO: Actually check the log completeness
--spec is_log_up_to_date(request_votes()) -> boolean().
-is_log_up_to_date(#rv{candidate_id=CandidateId})
-    when CandidateId =:= true  ->
-        true;
-% TODO: Get rid of the clause below. It is only here to pass dialyzer warning
-%       for now
-is_log_up_to_date(#rv{candidate_id='suppree@dialyzer.error'}) ->
-    false;
-is_log_up_to_date(_RV) ->
-    true.
+-spec is_log_up_to_date(raft_log_idx(), raft_term()) -> boolean().
+is_log_up_to_date(LastLogIndex, LastLogTerm) ->
+    case nilva_replication_log:get_log_entry(LastLogIndex) of
+        {error, _} ->
+            false;
+        LE ->
+            LastLogTerm == LE#log_entry.term
+    end.
 
 
 %% =========================================================================
