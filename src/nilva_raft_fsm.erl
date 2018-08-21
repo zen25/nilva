@@ -692,14 +692,18 @@ check_and_commit_log_entries(Data) ->
     % TODO: Apply log entries in [commit_idx + 1, N] to RSM
     %       get the results and send response to clients
     %       using csn_2_client table
-    Responses = apply_to_RSM(Data#raft.commit_idx + 1, NewCommitIdx, Data#raft.kv_store),
+    {Responses, KVStore} = apply_to_RSM(Data#raft.commit_idx + 1,
+                                        NewCommitIdx, Data#raft.kv_store),
     % Send responses to appropriate clients while updating csn_2_client
     P = fun(R, CSN_2_Client) ->
         New_CSN_2_Client = reply_to_client(R, CSN_2_Client),
         New_CSN_2_Client
     end,
     Final_CSN_2_Client = lists:foldl(P, Data#raft.csn_2_client, Responses),
-    Data#raft{commit_idx=NewCommitIdx, csn_2_client=Final_CSN_2_Client}.
+    Data#raft{
+        commit_idx=NewCommitIdx,
+        csn_2_client=Final_CSN_2_Client,
+        kv_store=KVStore}.
 
 
 -spec get_new_commit_index(raft_state()) -> raft_log_idx().
@@ -737,10 +741,11 @@ ready_to_commit(Term, N, MatchIndices, NQuorum) ->
     end.
 
 
--spec apply_to_RSM(raft_log_idx(), raft_log_idx(), map()) -> list(response_to_client()).
-apply_to_RSM(_StartingIdx, _EndingIdx, _KVStore) ->
+-spec apply_to_RSM(raft_log_idx(), raft_log_idx(), map()) ->
+    {list(response_to_client()), kv_store()}.
+apply_to_RSM(_StartingIdx, _EndingIdx, KVStore) ->
     % TODO
-    [].
+    {[], KVStore}.
 
 
 -spec resend_append_entries_if_necessary(raft_state()) -> raft_state().

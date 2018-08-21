@@ -47,7 +47,7 @@
 
 % Others
 %
-
+-type kv_store() :: map().
 
 %% ========================================================================
 %% Log related records
@@ -133,7 +133,7 @@
         % RSM KV Store
         %
         % Replcae this with something more robust at a later point
-        kv_store = #{}        :: map()
+        kv_store = #{}        :: kv_store()
         }).
 -type raft_state() :: #raft{}.
 
