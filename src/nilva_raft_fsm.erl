@@ -800,7 +800,11 @@ resend_append_entries_if_necessary(Data) ->
 % entry from csn_2_client map
 reply_to_client(Response = {CSN, _}, CSN_2_Client) ->
     {ok, Client} = maps:find(CSN, CSN_2_Client),
-    Client ! Response,
+    % Note: See gen_statem.erl source code on the structure of `From`
+    {ClientPID, Tag} = Client,
+    % TODO: Since otp already tags the msg when sending it, is csn necessary
+    %       for erlang api?
+    ClientPID ! {Tag, Response},
     maps:remove(CSN, CSN_2_Client);
 reply_to_client(_, CSN_2_Client) ->
     CSN_2_Client.
