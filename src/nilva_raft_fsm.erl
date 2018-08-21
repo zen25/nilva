@@ -755,6 +755,8 @@ reply_to_client(Response = {CSN, _}, CSN_2_Client) ->
     {ok, Client} = maps:find(CSN, CSN_2_Client),
     Client ! Response,
     maps:remove(CSN, CSN_2_Client).
+reply_to_client(_, CSN_2_Client) ->
+    CSN_2_Client.
 
 
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().
