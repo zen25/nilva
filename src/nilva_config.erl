@@ -22,9 +22,11 @@ read_config(FileName) ->
 
 
 -spec num_required_for_quorum(raft_state()) -> pos_integer().
+% NOTE: If we have 2f+1 servers, we need (f + 1) servers
+%       to handle 'f' failures
 num_required_for_quorum(#raft{config=Config}) ->
     Peers = Config#raft_config.peers,
-    ceil(length(Peers)/2).
+    floor(length(Peers)/2) + 1.
 
 
 

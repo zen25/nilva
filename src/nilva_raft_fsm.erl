@@ -476,7 +476,7 @@ leader(cast, RAE = #rae{peers_current_term = PTerm}, #raft{current_term = Term})
 leader(cast, RAE = #rae{peers_current_term = PTerm}, Data = #raft{current_term = Term})
     when PTerm =:= Term ->
         % TODO: Handle other things that are not no_op
-        ok = lager:info("node:~p term:~p state:~p event:~p action:~p",
+        ok = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                         [node(), Term, leader, RAE, handle_reply_to_ae]),
         NewData = handle_reply_to_ae(RAE, Data),
         {keep_state, NewData, []};
@@ -743,7 +743,8 @@ ready_to_commit(Term, N, MatchIndices, NQuorum) ->
                         (MIdx >= N) and (Term == LETerm)
                     end,
                     MatchIndices),
-            NQuorum =< length(Xs)
+            % +1 is for counting the leader's log entry
+            NQuorum =< (length(Xs) + 1)
     end.
 
 
