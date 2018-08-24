@@ -125,7 +125,7 @@
         %
         % We are storing log entries as records in Mnesia.
         % There is no easy way to do "log_entries[-1]" to get the
-        % last log entry as the primary key is {raft_term(), raft_idx()}.
+        % last log entry to get it's term & index.
         % Hence, we are keeping track of them here for performance reasons.
         % We do not want to query the whole table everytime we need this info.
         last_log_idx = 0      :: raft_log_idx(),
