@@ -105,9 +105,14 @@ resend_request_votes(R = #raft{votes_received=PTrue, votes_rejected=PFalse}, All
 -spec is_viable_leader(raft_state(), request_votes()) -> {boolean(), atom()}.
 is_viable_leader(Data = #raft{current_term=CurrentTerm}, RV = #rv{candidates_term=Term}) ->
     if
-        Term < CurrentTerm -> {false, deny_vote_stale_term};
+        Term < CurrentTerm ->
+            {false, deny_vote_stale_term};
         Term > CurrentTerm ->
-            case is_log_up_to_date(RV#rv.last_log_idx, RV#rv.last_log_term) of
+            PLastLogTerm = Data#raft.last_log_term,
+            PLastLogIdx = Data#raft.last_log_idx,
+            CLastLogTerm = RV#rv.last_log_term,
+            CLastLogIdx = RV#rv.last_log_idx,
+            case is_log_up_to_date(PLastLogTerm, PLastLogIdx, CLastLogTerm, CLastLogIdx) of
                 true -> {true, cast_vote};
                 false -> {false, deny_vote_log_not_up_to_date}
             end;
@@ -163,13 +168,20 @@ send_heart_beats(R = #raft{current_term=Term}) ->
     AE.
 
 
--spec is_log_up_to_date(raft_log_idx(), raft_term()) -> boolean().
-is_log_up_to_date(LastLogIndex, LastLogTerm) ->
-    case nilva_replication_log:get_log_entry(LastLogIndex) of
-        {error, _} ->
+-spec is_log_up_to_date(raft_term(), raft_log_idx(),
+                        raft_term(), raft_log_idx()) ->
+    boolean().
+is_log_up_to_date(PLastLogTerm, PLastLogIdx, CLastLogTerm, CLastLogIdx) ->
+    if
+        PLastLogTerm > CLastLogTerm ->
+            % Peer has log entries from higher term
             false;
-        LE ->
-            LastLogTerm == LE#log_entry.term
+        PLastLogTerm < CLastLogTerm ->
+            % Candidate has log entries from higher term
+            true;
+        PLastLogTerm == CLastLogTerm ->
+            % See which of them have the longest log
+            PLastLogIdx =< CLastLogIdx
     end.
 
 
