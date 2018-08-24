@@ -831,14 +831,17 @@ cast(Node, Msg) ->
 init_raft_state(Config) ->
     nilva_replication_log:init(),
     Peers = Config#raft_config.peers,
+    {LastLogIdx, LastLogTerm} = nilva_replication_log:get_last_log_idx_and_term(),
     #raft{
-        config = Config,
-        votes_received = [],
-        votes_rejected = [],
-        next_idx = [{P, 0} || P <- Peers],
-        match_idx = [{P, 0} || P <- Peers],
-        election_timeout = nilva_election:get_election_timeout(Config)
-    }.
+            config = Config,
+            votes_received = [],
+            votes_rejected = [],
+            last_log_idx = LastLogIdx,
+            last_log_term = LastLogTerm,
+            next_idx = [{P, 0} || P <- Peers],
+            match_idx = [{P, 0} || P <- Peers],
+            election_timeout = nilva_election:get_election_timeout(Config)
+        }.
 
 
 -spec update_term(raft_state(), raft_term()) -> raft_state().

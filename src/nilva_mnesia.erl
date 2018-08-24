@@ -13,6 +13,7 @@
          write_entry/1,
          write_entries/1
          ]).
+-export([get_last_log_idx_and_term/0]).
 
 
 -define(PERSISTENT_STATE_KEY, 0).    % Just a key, no practical significance
@@ -235,6 +236,22 @@ del_log_entries_starting_from(Idx) ->
                 qlc:e(Q)
             end,
     txn_run(Query).
+
+
+%% =========================================================================
+%% helpers (public)
+%% =========================================================================
+
+
+get_last_log_idx_and_term() ->
+    F = fun() ->
+            Indices = mnesia:all_keys(nilva_log_entry),
+            MaxIdx = lists:max(Indices),
+            [X] = mnesia:read(nilva_log_entry, MaxIdx),
+            {MaxIdx, X#nilva_log_entry.term}
+        end,
+    txn_run_and_get_result(F).
+
 
 
 

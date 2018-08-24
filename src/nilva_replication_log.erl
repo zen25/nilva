@@ -14,7 +14,7 @@
          erase_log_entries/1,
          append_entries/1
          ]).
--export([check_log_completeness/2]).
+-export([check_log_completeness/2, get_last_log_idx_and_term/0]).
 -export([init/0]).
 
 
@@ -80,6 +80,14 @@ append_entries([LogEntry]) ->
     nilva_mnesia:write_entry(LogEntry);
 append_entries(LogEntries) ->
     nilva_mnesia:write_entries(LogEntries).
+
+
+-spec get_last_log_idx_and_term() -> {raft_log_idx(), raft_term()}.
+get_last_log_idx_and_term() ->
+    case nilva_mnesia:get_last_log_idx_and_term() of
+        {error, _} -> {0, 0};
+        Res -> Res
+    end.
 
 
 init() ->
