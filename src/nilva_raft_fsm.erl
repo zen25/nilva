@@ -516,6 +516,8 @@ leader({call, From}, {client_request, Req}, Data) ->
 % Replicate the client request, once replicated on quorum of peers, apply to rsm
 % and return the result to client. Notify the peers about commit index too
 leader(cast, process_buffered_requests, Data) ->
+    % NOTE: We do not need to create AEs to write client requests to leader's log.
+    %       But we still do it as we can use the same code a follower does
     AEs = make_append_entries(Data),
     case append_entries_to_log(AEs, Data) of
         log_not_up_to_date ->
@@ -526,7 +528,9 @@ leader(cast, process_buffered_requests, Data) ->
             ok = lager:error("Failed to persist log entries to leader's log"),
             {keep_state_and_data, []};
         NewData ->
-            broadcast(get_peers(NewData), AEs),
+            AE_MsgForPeers = [{P, make_ae_for_peer(Data, P)} ||
+                              P <- get_peers(Data)],
+            broadcast(AE_MsgForPeers),
             {keep_state, NewData, []}
     end;
 leader(EventType, EventContent, Data) ->
@@ -625,6 +629,20 @@ make_append_entries(Data) ->
     }.
 
 
+-spec make_ae_for_peer(raft_state(), raft_peer_id()) -> append_entries().
+make_ae_for_peer(Data, Peer) ->
+    NextIndex = proplists:get_value(Peer, Data#raft.next_idx),
+    LEs = nilva_replication_log:get_log_entries(NextIndex),
+    #ae{
+        leaders_term    = Data#raft.current_term,
+        leader_id       = node(),
+        prev_log_idx    = Data#raft.last_log_idx,
+        prev_log_term   = Data#raft.last_log_term,
+        entries         = LEs,
+        leaders_commit_idx = Data#raft.commit_idx
+    }.
+
+
 -spec convert_ae_to_log_entries(append_entries()) -> list(log_entry()).
 convert_ae_to_log_entries(AE) ->
     % Monotonically increase index starting from last_log_index if the term is the
@@ -676,12 +694,15 @@ handle_reply_to_ae(RAE = #rae{success=false, peer_id=Peer}, Data) ->
             Data;
         false ->
             NextIndices = proplists:delete(Peer, Data#raft.next_idx),
-            Data#raft{
+            NewData = Data#raft{
                 next_idx = NextIndices ++ [{Peer, max(RAE#rae.peers_last_log_idx - 1, 0)}]
-            }
+            },
+            ok = lager:info("~p is lagging behind leader ~p. Bring it up to date",
+                            [Peer, node()]),
+            AE = make_ae_for_peer(NewData, Peer),
+            cast(Peer, AE)
     end,
-    NewRes = resend_append_entries_if_necessary(Res),
-    NewRes.
+    Res.
 
 
 -spec check_and_commit_log_entries(raft_state()) -> raft_state().
@@ -791,10 +812,6 @@ apply_log_entry(LE, {KVStore, Responses}) ->
     end.
 
 
--spec resend_append_entries_if_necessary(raft_state()) -> raft_state().
-resend_append_entries_if_necessary(Data) ->
-    Data.
-
 
 -spec reply_to_client(response_to_client(), map()) -> map().
 % Send response to the client based on csn & then remove the corresponding
@@ -812,8 +829,15 @@ reply_to_client(_, CSN_2_Client) ->
 
 
 -spec broadcast(list(raft_peer_id()), any()) -> no_return().
+% Send the given msg to all the peers
 broadcast(Peers, Msg) ->
     lists:foreach(fun(Node) -> cast(Node, Msg) end, Peers).
+
+
+-spec broadcast(list({raft_peer_id(), any()})) -> no_return().
+% Send the message to the chosen peer, for all X in given list of msgs
+broadcast(Msgs) ->
+    lists:foreach(fun({Node, Msg}) -> cast(Node, Msg) end, Msgs).
 
 
 -spec cast(node(), any()) -> no_return().

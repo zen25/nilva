@@ -40,6 +40,8 @@ vote(Peer) ->
 
 
 -spec check_log_completeness(append_entries(), raft_state()) -> boolean().
+% TODO: Do we need to distinguish between simply append, reject, overwrite & append
+%       Seems like the result should be tri-state to me
 check_log_completeness(AE=#ae{prev_log_idx=LIdx}, State=#raft{last_log_idx=FIdx})
     when LIdx == FIdx ->
         % Follower is supposed to be up to date with the leader
@@ -47,9 +49,11 @@ check_log_completeness(AE=#ae{prev_log_idx=LIdx}, State=#raft{last_log_idx=FIdx}
 check_log_completeness(_AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
     when LIdx > FIdx ->
         % Follower is not up to date with the leader
+        % The logs should not have any holes
         false;
 check_log_completeness(AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
     when LIdx < FIdx ->
+        % Follower has excess entries
         LE = get_log_entry(LIdx),
         case LE of
             {error, _Error} ->

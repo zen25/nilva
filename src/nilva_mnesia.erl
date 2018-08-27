@@ -225,7 +225,13 @@ get_log_entries_starting_from(Idx) ->
                 qlc:e(Q)
             end,
     LES = txn_run_and_get_result(Query),
-    lists:map(fun convert_to_log_entry/1, LES).
+    % NOTE: We are storing the log entries in a set
+    %       Sorting by Idx is necessary to give the illusion of order
+    SortByIdx = fun({nilva_log_entry, Idx1, _, _, _}, {nilva_log_entry, Idx2, _, _, _}) ->
+                    Idx1 =< Idx2
+                end,
+    OrdredLES = lists:sort(SortByIdx, LES),
+    lists:map(fun convert_to_log_entry/1, OrdredLES).
 
 
 del_log_entries_starting_from(Idx) ->
