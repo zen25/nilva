@@ -138,6 +138,9 @@ follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
         case append_entries_to_log(AE, Data) of
             log_not_up_to_date ->
                 ok = lager:info("Follower's log is NOT complete"),
+                ok = lager:info("Last Entry {idx, term}: F = {~p, ~p}, L = {~p, ~p}",
+                                [Data#raft.last_log_idx, Data#raft.last_log_term,
+                                AE#ae.prev_log_idx, AE#ae.prev_log_term]),
                 RAE = #rae{
                         peers_current_term = FT,
                         peer_id = node(),
@@ -633,11 +636,19 @@ make_append_entries(Data) ->
 make_ae_for_peer(Data, Peer) ->
     NextIndex = proplists:get_value(Peer, Data#raft.next_idx),
     LEs = nilva_replication_log:get_log_entries(NextIndex),
+    {LastLogIdx, LastLogTerm} = case NextIndex =< 1 of
+        true ->
+            {0, 0};
+        false ->
+            LastLogEntry = nilva_replication_log:get_log_entry(NextIndex - 1),
+            % erlang:display(LastLogEntry),
+            {LastLogEntry#log_entry.index, LastLogEntry#log_entry.term}
+    end,
     #ae{
         leaders_term    = Data#raft.current_term,
         leader_id       = node(),
-        prev_log_idx    = Data#raft.last_log_idx,
-        prev_log_term   = Data#raft.last_log_term,
+        prev_log_idx    = LastLogIdx,
+        prev_log_term   = LastLogTerm,
         entries         = LEs,
         leaders_commit_idx = Data#raft.commit_idx
     }.

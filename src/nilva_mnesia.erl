@@ -306,7 +306,9 @@ init_tables() ->
                          ?PERSISTENT_STATE_KEY, ?FIRST_TERM, undefined})
             % mnesia:write({nilva_state_transition, 0, FirstValidTerm, boot, follower})
         end,
-    txn_run(F).
+    txn_run(F),
+    % For debugging
+    del_log_entries_starting_from(0).
 
 
 txn_run_and_get_result(F) ->
