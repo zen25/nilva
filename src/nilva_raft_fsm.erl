@@ -664,12 +664,14 @@ make_ae_for_peer(Data, Peer) ->
             % erlang:display(LastLogEntry),
             {LastLogEntry#log_entry.index, LastLogEntry#log_entry.term}
     end,
+    % See the note in buffer_client_request/3 w.r.t reverse
+    ClientRequestInOrderOfArrival = lists:reverse(Data#raft.client_requests_buffer),
     #ae{
         leaders_term    = Data#raft.current_term,
         leader_id       = node(),
         prev_log_idx    = LastLogIdx,
         prev_log_term   = LastLogTerm,
-        entries         = LEs,
+        entries         = LEs ++ ClientRequestInOrderOfArrival,
         leaders_commit_idx = Data#raft.commit_idx
     }.
 
