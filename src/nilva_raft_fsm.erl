@@ -100,30 +100,26 @@ follower({timeout, election_timeout}, election_timeout, Data) ->
                         election_timeout, nominate_self]),
     {next_state, candidate, Data};
 % Append Entries request (valid heartbeat, current term)
-follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_term=FT})
+follower(cast, AE=#ae{leaders_term=LT, entries=[]}, Data = #raft{current_term=FT})
     when FT =:= LT ->
         _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                             [node(), FT, follower, AE, reset_election_timer]),
+        Success = log_is_up_to_date == nilva_replication_log:check_log_completeness(AE, Data),
         RAE = #rae{peers_current_term = FT,
                    peer_id = node(),
                    peers_last_log_idx = Data#raft.last_log_idx,
-                   success = true
+                   success = Success
                    },
+        erlang:display(RAE),
         cast(AE#ae.leader_id, RAE),
         {keep_state_and_data, [reset_election_timer(Data)]};
 % Append Entries request (valid heartbeat, leader with higher term)
-follower(cast, AE=#ae{leaders_term=LT, entries=[no_op]}, Data = #raft{current_term=FT})
+follower(cast, AE=#ae{leaders_term=LT, entries=[]}, Data = #raft{current_term=FT})
     when FT < LT ->
         _Ignore = lager:debug("node:~p term:~p state:~p event:~p action:~p",
                             [node(), FT, follower, AE, update_term_and_reset_election_timer]),
         NewData = update_term(Data, LT),
-        RAE = #rae{peers_current_term = NewData#raft.current_term,
-                   peer_id = node(),
-                   peers_last_log_idx = NewData#raft.last_log_idx,
-                   success = true
-                   },
-        cast(AE#ae.leader_id, RAE),
-        {keep_state, NewData, [reset_election_timer(NewData)]};
+        {keep_state, NewData, [{next_event, cast, AE}]};
 % Append Entries request (valid, leader with higher term)
 follower(cast, AE=#ae{leaders_term=LT}, Data=#raft{current_term=FT})
     when FT < LT ->

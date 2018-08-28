@@ -162,7 +162,7 @@ send_heart_beats(R = #raft{current_term=Term}) ->
              leader_id = node(),
              prev_log_idx = R#raft.last_log_idx,
              prev_log_term = R#raft.last_log_term,
-             entries = [no_op],
+             entries = [],
              leaders_commit_idx = R#raft.commit_idx
              },
     AE.
