@@ -592,12 +592,13 @@ buffer_client_request(From, Req = {CSN, _, _, _, _}, Data) ->
     | failed_to_update_log.
 append_entries_to_log(AE, Data) ->
     case nilva_replication_log:check_log_completeness(AE, Data) of
-        false ->
+        log_is_missing_entries ->
             % NOTE: Leader's log is the single source of truth. It is
             %       by definition complete. Hence, log completion should
             %       always return true for the leader
             log_not_up_to_date;
-        true ->
+        log_is_up_to_date ->
+            % We have all the entries from leader and there are no extraneous log entries
             LogEntries = convert_ae_to_log_entries(AE),
             case nilva_replication_log:append_entries(LogEntries) of
                 ok ->
@@ -609,7 +610,26 @@ append_entries_to_log(AE, Data) ->
                                 },
                     NewData;
                 {error, Error} ->
-                    ok = lager:error("Unable to persist log entrie"),
+                    ok = lager:error("Unable to persist log entries"),
+                    ok = lager:error(Error),
+                    failed_to_update_log
+            end;
+        log_needs_to_be_overwritten ->
+            % We have the entries but there are extraneous log entries in follower
+            LastCommonLEIdx = AE#ae.prev_log_idx,
+            nilva_replication_log:erase_log_entries(LastCommonLEIdx + 1),
+            LogEntries = convert_ae_to_log_entries(AE),
+            case nilva_replication_log:append_entries(LogEntries) of
+                ok ->
+                    [LastLogEntry | _] = lists:reverse(LogEntries),
+                    NewData = Data#raft{
+                                    client_requests_buffer = [],
+                                    last_log_idx = LastLogEntry#log_entry.index,
+                                    last_log_term = LastLogEntry#log_entry.term
+                                },
+                    NewData;
+                {error, Error} ->
+                    ok = lager:error("Unable to persist log entries"),
                     ok = lager:error(Error),
                     failed_to_update_log
             end

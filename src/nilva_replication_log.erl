@@ -39,18 +39,24 @@ vote(Peer) ->
     nilva_mnesia:set_voted_for(Peer).
 
 
--spec check_log_completeness(append_entries(), raft_state()) -> boolean().
+-spec check_log_completeness(append_entries(), raft_state())
+    -> log_is_up_to_date
+    | log_is_missing_entries
+    | log_needs_to_be_overwritten.
 % TODO: Do we need to distinguish between simply append, reject, overwrite & append
 %       Seems like the result should be tri-state to me
 check_log_completeness(AE=#ae{prev_log_idx=LIdx}, State=#raft{last_log_idx=FIdx})
     when LIdx == FIdx ->
         % Follower is supposed to be up to date with the leader
-        AE#ae.prev_log_term == State#raft.last_log_term;
+        case AE#ae.prev_log_term == State#raft.last_log_term of
+            true -> log_is_up_to_date;
+            false -> log_needs_to_be_overwritten
+        end;
 check_log_completeness(_AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
     when LIdx > FIdx ->
         % Follower is not up to date with the leader
         % The logs should not have any holes
-        false;
+        log_is_missing_entries;
 check_log_completeness(AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx})
     when LIdx < FIdx ->
         % Follower has excess entries
@@ -59,9 +65,12 @@ check_log_completeness(AE=#ae{prev_log_idx=LIdx}, _State=#raft{last_log_idx=FIdx
             {error, _Error} ->
                 % NOTE: Should not be possible.
                 %       There should not be holes in the log
-                false;
+                log_is_missing_entries;
             _ ->
-                LE#log_entry.term == AE#ae.prev_log_term
+                case LE#log_entry.term == AE#ae.prev_log_term of
+                    true -> log_needs_to_be_overwritten;
+                    false -> log_is_missing_entries
+                end
         end.
 
 
