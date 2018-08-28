@@ -656,6 +656,7 @@ make_append_entries(Data) ->
 make_ae_for_peer(Data, Peer) ->
     NextIndex = proplists:get_value(Peer, Data#raft.next_idx),
     LEs = nilva_replication_log:get_log_entries(NextIndex),
+    Entries = [LE#log_entry.entry || LE <- LEs],
     {LastLogIdx, LastLogTerm} = case NextIndex =< 1 of
         true ->
             {0, 0};
@@ -671,7 +672,7 @@ make_ae_for_peer(Data, Peer) ->
         leader_id       = node(),
         prev_log_idx    = LastLogIdx,
         prev_log_term   = LastLogTerm,
-        entries         = LEs ++ ClientRequestInOrderOfArrival,
+        entries         = Entries ++ ClientRequestInOrderOfArrival,
         leaders_commit_idx = Data#raft.commit_idx
     }.
 
