@@ -9,11 +9,11 @@ KV Store implementation based on Raft.
     + [ ] Log Replication
     + [ ] Snapshotting
     + [ ] Membership changes
-    + [ ] RSM
-    + [ ] Client Interaction
+    + [X] RSM
+    + [X] Client Interaction
 + [ ] Other parts of KV store
-    + [ ] Rest API for clients (Put, Get, Delete only)
-    + [ ] Durable Raft Logs
+    + [ ] REST API for clients (Put, Get, Delete only)
+    + [X] Durable Raft Logs
     + [ ] Linearizability from client perspective
     + [ ] sharding of keys
 + [ ] Optimizations
