@@ -74,6 +74,8 @@ validate_timeouts(H, Emin, Emax, CRT)
     when is_integer(H), is_integer(Emin), is_integer(Emax), is_integer(CRT) ->
         % TODO: Is there any relationship between CRT and election timeouts?
         %       Is CRT < EMin or CRT > EMax? Which makes sense, if any?
+        %
+        % TODO: Should we enforce Heartbeat << Emin?
         L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emin < Emax, H < Emin],
         lists:all(fun(X) -> X and true end, L).
 
