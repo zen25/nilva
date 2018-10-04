@@ -209,5 +209,4 @@ get_election_timeout_test_() ->
     [?_assert((ET >= 100) and (ET =< 200)),
     ?_assertError(function_clause, get_election_timeout(InvalidConfig))].
 
-% Make sure we are getting a series of random numbers
-% Make this a property based test
+

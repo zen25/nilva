@@ -110,7 +110,7 @@ follower(cast, AE=#ae{leaders_term=LT, entries=[]}, Data = #raft{current_term=FT
                    peers_last_log_idx = Data#raft.last_log_idx,
                    success = Success
                    },
-        erlang:display(RAE),
+        % erlang:display(RAE),
         cast(AE#ae.leader_id, RAE),
         {keep_state_and_data, [reset_election_timer(Data)]};
 % Append Entries request (valid heartbeat, leader with higher term)

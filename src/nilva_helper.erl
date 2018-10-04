@@ -22,7 +22,7 @@ getUniformRandInt(Min, Max) ->
     round(getUniformRand(Min, Max)).
 
 
-% -spec spawn_and_get_result(function()) -> any().
+-spec spawn_and_get_result(function()) -> any().
 spawn_and_get_result(F) ->
     Self = self(),
     Pid = spawn(fun() -> X = F(), Self ! {self(), X} end),
@@ -38,10 +38,14 @@ spawn_and_get_result(F) ->
 %% =========================================================================
 
 getUniformRand_test_() ->
+    % Valid min & max
     {Min, Max} = {95.8, 209},
     X = getUniformRand(Min, Max),
+    % Invalid min & max
     {Min2, Max2} = {209, 95.8},
+    % Check if a random number if generated with valid min & max
     [?_assert((X >= Min) and (X =< Max)),
+    % Check if an error is thrown when min > max
     ?_assertException(error, function_clause, getUniformRand(Min2, Max2))].
 
 % Also tests spawn_and_get_result
@@ -51,7 +55,10 @@ getUniformRand_randomness_test_() ->
     Xs = F(),
     Xs_set = sets:from_list(Xs),
     Xs_different_process = spawn_and_get_result(F),
+    % Check if sequence of random numbers generated are different from each other
     [?_assertEqual(length(Xs), sets:size(Xs_set)),
+    % Test whether the random number sequences generated in separate processes are
+    % different from each other
     ?_assertNotEqual(Xs, Xs_different_process)].
 
 getUniformRandInt_test_() ->
