@@ -69,10 +69,12 @@ validate_peers(Peers) when is_list(Peers) ->
     lists:all(fun(P) -> is_atom(P) end, Peers).
 
 % private
--spec validate_timeouts(any(), any(), any(), any()) -> boolean().
+-spec validate_timeouts(timeout(), timeout(), timeout(), timeout()) -> boolean().
 validate_timeouts(H, Emin, Emax, CRT)
     when is_integer(H), is_integer(Emin), is_integer(Emax), is_integer(CRT) ->
-        L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emin < Emax, H < Emin, CRT < Emin],
+        % TODO: Is there any relationship between CRT and election timeouts?
+        %       Is CRT < EMin or CRT > EMax? Which makes sense, if any?
+        L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emin < Emax, H < Emin],
         lists:all(fun(X) -> X and true end, L).
 
 
@@ -117,5 +119,18 @@ validate_peers_test_() ->
     ?_assertNot(validate_peers(InvalidPeers))].
     % TODO: Dialyzer is not accepting this case
     % ?_assertError(function_clause, validate_peers(InvalidPeers2))].
+
+
+validate_timeouts_test_() ->
+    % All timeouts are valid
+    {H, EMin, EMax, CRT} = {10, 100, 300, 3000},
+    % Heartbeat is not valid
+    InvalidH = 190,
+    % EMin > EMax
+    {InvalidEMin, InvalidEMax} = {1000, 300},
+    [?_assert(validate_timeouts(H, EMin, EMax, CRT)),
+    ?_assertNot(validate_timeouts(InvalidH, EMin, EMax, CRT)),
+    ?_assertNot(validate_timeouts(H, InvalidEMin, InvalidEMax, CRT))].
+
 
 
