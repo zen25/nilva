@@ -135,4 +135,28 @@ validate_timeouts_test_() ->
     ?_assertNot(validate_timeouts(H, InvalidEMin, InvalidEMax, CRT))].
 
 
-
+convertToConfigRecord_test_() ->
+    ValidProps = [
+        {peers, ['p1', 'p2', 'p3']},
+        {heart_beat_interval, 10},
+        {election_timeout_min, 500},
+        {election_timeout_max, 1000},
+        {client_request_timeout, 250}
+    ],
+    InvalidPropsTimeouts = [
+        {peers, ['p1', 'p2', 'p3']},
+        {heart_beat_interval, 10000000000},
+        {election_timeout_min, 500},
+        {election_timeout_max, 1000},
+        {client_request_timeout, 250}
+    ],
+    InvalidPropsPeers = [
+        {peers, ["p1", "p2", "p3"]},
+        {heart_beat_interval, 10},
+        {election_timeout_min, 500},
+        {election_timeout_max, 1000},
+        {client_request_timeout, 250}
+    ],
+    [?_assert(is_record(convertToConfigRecord(ValidProps), raft_config)),
+    ?_assertNot(is_record(convertToConfigRecord(InvalidPropsPeers), raft_config)),
+    ?_assertNot(is_record(convertToConfigRecord(InvalidPropsTimeouts), raft_config))].
