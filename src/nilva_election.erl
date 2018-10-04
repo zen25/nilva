@@ -194,7 +194,7 @@ get_election_timeout_test_() ->
     % 2. Only those two in the config should affect it, i.e.,
     %    setting peers etc., to different values should not affect
     %    the election timeout as long as min & max are the same
-    Config = #raft_config{peers = [],
+    ValidConfig = #raft_config{peers = [],
                           heart_beat_interval = infinity,
                           client_request_timeout = infinity,
                           election_timeout_max=200,
@@ -205,8 +205,10 @@ get_election_timeout_test_() ->
                         client_request_timeout = infinity,
                         election_timeout_max=200,
                         election_timeout_min=300},
-    ET = get_election_timeout(Config),
+    ET = get_election_timeout(ValidConfig),
+    % Ensure that election timeout is between specified min & max
     [?_assert((ET >= 100) and (ET =< 200)),
+    % Check if we throw an error when the config has invalid min & max
     ?_assertError(function_clause, get_election_timeout(InvalidConfig))].
 
 

@@ -1,11 +1,11 @@
 % Helper module to handle cluster configuration changes
 %
 -module(nilva_config).
+-include_lib("eunit/include/eunit.hrl").
 
 -export([read_config/1,
         num_required_for_quorum/1
         ]).
-% TODO: Split the header file. Having a single header seems like a bad idea
 -include("nilva_types.hrl").
 
 
@@ -74,5 +74,48 @@ validate_timeouts(H, Emin, Emax, CRT)
     when is_integer(H), is_integer(Emin), is_integer(Emax), is_integer(CRT) ->
         L = [H > 0, Emin > 0, Emax > 0, CRT > 0, Emin < Emax, H < Emin, CRT < Emin],
         lists:all(fun(X) -> X and true end, L).
+
+
+%% =========================================================================
+%% Unit Tests
+%% =========================================================================
+
+num_required_for_quorum_test_() ->
+    EvenPeers = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
+    OddPeers = EvenPeers ++ ['p7'],
+    NQuorum = 4,
+    EvenConfig = #raft_config{
+        peers = EvenPeers,
+        heart_beat_interval = 10,
+        election_timeout_min = 100,
+        election_timeout_max = 300,
+        client_request_timeout = 5000
+    },
+    OddConfig = EvenConfig#raft_config{peers = OddPeers},
+    RandET = 167,
+    EvenRaft = #raft{
+        config = EvenConfig,
+        votes_received = [],
+        votes_rejected = [],
+        next_idx = [],
+        match_idx = [],
+        election_timeout = RandET
+    },
+    OddRaft = EvenRaft#raft{config = OddConfig},
+    % Check quorum calculation when cluster has even peers
+    [?_assertEqual(NQuorum, num_required_for_quorum(EvenRaft)),
+    % Check quorum calculation when cluster has odd peers
+    ?_assertEqual(NQuorum, num_required_for_quorum(OddRaft))].
+
+
+validate_peers_test_() ->
+    ValidPeers = ['p1', 'p2', 'p3'],
+    InvalidPeers = ['p1', "p2", "p3"],
+    % InvalidPeers2 = {'p1', 'p2', 'p3'},
+    % Check if all the peers are atoms in a list
+    [?_assert(validate_peers(ValidPeers)),
+    ?_assertNot(validate_peers(InvalidPeers))].
+    % TODO: Dialyzer is not accepting this case
+    % ?_assertError(function_clause, validate_peers(InvalidPeers2))].
 
 
